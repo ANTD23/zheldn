@@ -330,7 +330,7 @@ function freshState(){
 function migrate(s){ s.settings=Object.assign(clone(DEF_SETTINGS),s.settings||{}); s.gyms=s.gyms||[]; s.exercises=s.exercises||[]; s.templates=s.templates||[]; s.body=s.body||[];
   s.gyms.forEach(g=>{ if(!Array.isArray(g.machines)) g.machines=g.id==='g_ddx'&&(s.v||1)<2?ddxMachines():[]; if(g.kb==null) g.kb=g.id==='g_ddx'?'8, 12, 16, 20, 24, 28, 32':''; g.machines.forEach(m=>{ if(!m.id) m.id='m'+uid(); }); });
   if((s.v||1)<2){ const seed=seedExercises(); seed.forEach(x=>{ const e=s.exercises.find(y=>y.id===x.id); if(e){ if(e.machine==null&&x.machine) e.machine=x.machine; } else if(['kettlebell'].includes(x.equip)||x.id==='x_smithsq') s.exercises.push(x); }); s.v=2; }
-  s.exercises.forEach(e=>{ if(e.machine==null) e.machine=''; });
+  s.exercises.forEach(e=>{ if(e.machine==null) e.machine=''; if(e.pre){ const ts=[s.templates.find(t=>t.id===s.nextTpl),...s.templates].filter(Boolean); const t=ts.find(t=>t.items.some(i=>i.exId===e.id)); if(t){ const it=t.items.find(i=>i.exId===e.id); if(!it.pre) it.pre=e.pre; } delete e.pre; } });
   return s; }
 
 /* ---------- state ---------- */
@@ -388,7 +388,7 @@ function lastEntry(exId){ const f=fin(); for(let i=f.length-1;i>=0;i--){ const e
 function exHistory(exId,list){ return (list||fin()).map(s=>{ const e=s.entries.find(x=>x.exId===exId); if(!e) return null; const ws=e.sets.filter(x=>x.k==='w'); if(!ws.length) return null;
   const top=ws.reduce((a,b)=>b.w>a.w||(b.w===a.w&&b.r>a.r)?b:a); return {s,e,e1:entryE1(e),topW:top.w,topR:top.r,ton:entryTon(e)}; }).filter(Boolean); }
 
-function buildEntry(ex,gym){
+function buildEntry(ex,gym,pre){
   const st=S.settings, list=options(ex,gym), L=lastEntry(ex.id), nW=st.workSets;
   let W=null,kind='new',note='',last='',reps=Array(nW).fill(st.repMin);
   if(L){
@@ -403,8 +403,8 @@ function buildEntry(ex,gym){
   } else if(ex.start!=null){ W=floorW(list,ex.start); note=`Стартовый вес. Цель — ${st.repMin} повторений и выше`; }
   else if(ex.equip==='bodyweight'){ W=0; note='Нет истории. Вес — добавочный, 0 = без отягощения'; }
   else note=`Нет истории. Введите вес, с которым сделаете ${st.repMin} повторений`;
-  if(ex.pre&&ex.pre.w!=null){ const calc=W; W=list.some(v=>Math.abs(v-ex.pre.w)<1e-9)?ex.pre.w:floorW(list,ex.pre.w); kind='pre';
-    note=`Вес задан заранее: ${fmt(W)} кг`+(calc!=null&&Math.abs(calc-W)>1e-9?` (по прогрессии было бы ${fmt(calc)} кг)`:''); if(ex.pre.r) reps=Array(nW).fill(ex.pre.r); }
+  if(pre&&pre.w!=null){ const calc=W; W=list.some(v=>Math.abs(v-pre.w)<1e-9)?pre.w:floorW(list,pre.w); kind='pre';
+    note=`Вес задан заранее: ${fmt(W)} кг`+(calc!=null&&Math.abs(calc-W)>1e-9?` (по прогрессии было бы ${fmt(calc)} кг)`:''); if(pre.r) reps=Array(nW).fill(pre.r); }
   const sets=[];
   if(ex.warm!==false) st.warm.forEach(wu=>sets.push({k:'r',w:W!=null?floorW(list,W*wu.p/100):null,r:wu.r,done:false}));
   for(let i=0;i<nW;i++) sets.push({k:'w',w:W,r:reps[i]??st.repMin,done:false});
@@ -582,10 +582,10 @@ function confirmSheet(title,text,ok,cb,danger){ openSheet(`<h2>${esc(title)}</h2
 
 /* ---------- views: train ---------- */
 function nextTpl(){ return S.templates.find(t=>t.id===S.nextTpl)||S.templates[0]; }
-function tplPreview(t,gym){ return t.items.map(it=>exById(it.exId)).filter(Boolean).map(ex=>{ const e=buildEntry(ex,gym); const ws=e.sets.find(x=>x.k==='w');
+function tplPreview(t,gym){ return t.items.map((it,i)=>({it,i,ex:exById(it.exId)})).filter(o=>o.ex).map(({it,i,ex})=>{ const e=buildEntry(ex,gym,it.pre); const ws=e.sets.find(x=>x.k==='w');
   const ar=e.plan.kind==='up'?'<span class="arrow-up">↑</span> ':e.plan.kind==='down'?'<span class="arrow-down">↓</span> ':e.plan.kind==='pre'?'<span class="badge acc">задан</span> ':'';
   const w=ws&&ws.w!=null? (ex.equip==='bodyweight'&&!ws.w?'свой вес':fmt(ws.w)+' кг')+' × '+e.sets.filter(x=>x.k==='w').map(x=>x.r).join('/') : 'вес не задан';
-  return `<button class="prow" data-a="preOpen" data-id="${ex.id}"><span>${esc(ex.name)}</span><b>${ar}${w}</b></button>`; }).join(''); }
+  return `<button class="prow" data-a="preOpen" data-t="${t.id}" data-i="${i}"><span>${esc(ex.name)}</span><b>${ar}${w}</b></button>`; }).join(''); }
 function lastDone(tid){ const f=fin().filter(s=>s.tplId===tid); return f.length?f[f.length-1].start:null; }
 function viewHome(){
   const gym=gymOf(S.gymId), nt=nextTpl();
@@ -598,7 +598,7 @@ function viewHome(){
     <div class="plan-l">${tplPreview(nt,gym)||'<div class="muted">В шаблоне нет упражнений</div>'}</div><p class="muted" style="font-size:13px">Нажмите на упражнение, чтобы заранее задать вес.</p>
     <button class="btn primary big wide" data-a="start" data-id="${nt.id}">Начать тренировку</button></section>`;
     const others=S.templates.filter(t=>t.id!==nt.id);
-    if(others.length) b+=`<section class="card"><div class="lbl">Другие шаблоны</div><div class="list">${others.map(t=>{const ld=lastDone(t.id); return `<div class="li"><div class="grow"><div class="t">${esc(t.name)}</div><div class="s">${t.items.length} ${plural(t.items.length,'упражнение','упражнения','упражнений')}${ld?' · '+dfmt(ld):''}</div></div><button class="btn sm" data-a="start" data-id="${t.id}">Начать</button></div>`;}).join('')}</div></section>`;
+    if(others.length) b+=`<section class="card"><div class="lbl">Другие шаблоны</div><div class="list">${others.map(t=>{const ld=lastDone(t.id); return `<div class="li"><button class="grow" style="border:0;background:none;text-align:left;padding:0" data-a="go" data-v="tplEdit" data-id="${t.id}"><div class="t">${esc(t.name)}</div><div class="s">${t.items.length} ${plural(t.items.length,'упражнение','упражнения','упражнений')}${ld?' · '+dfmt(ld):''}${t.items.some(i=>i.pre)?' · <span class="badge acc">веса заданы</span>':''} · веса ›</div></button><button class="btn sm" data-a="start" data-id="${t.id}">Начать</button></div>`;}).join('')}</div></section>`;
   } else b+=`<section class="card empty"><h3>Нет шаблонов</h3><p>Создайте шаблон тренировки: набор упражнений, который вы будете запускать.</p><button class="btn primary" data-a="tplNew">Создать шаблон</button></section>`;
   b+=`<div class="btns"><button class="btn" data-a="start">Свободная тренировка</button><button class="btn" data-a="go" data-v="calc">Калькулятор блинов</button></div>`;
   const f=fin(); if(f.length){ const s=f[f.length-1]; b+=`<button class="card li" style="padding:14px;border:0" data-a="go" data-v="session" data-id="${s.id}"><div class="grow"><div class="lbl">Прошлая тренировка</div><div class="t">${esc(s.name)} · ${dfmt(s.start,{day:'numeric',month:'long'})}</div><div class="s">${ton(sessTon(s))} · ${durTxt(s.end-s.start)}</div></div><span class="chev">${IC.chev}</span></button>`; }
@@ -760,7 +760,7 @@ function viewTplList(){
 }
 function viewTplEdit(){ const t=S.templates.find(x=>x.id===UI.id); if(!t){ UI.view=null; return TABS[UI.tab](); }
   let b=`<label class="field"><span>Название</span><input class="in" id="tplName" data-f="tplName" value="${esc(t.name)}"></label>
-  <section class="card"><div class="lbl">Упражнения по порядку</div><div class="list">${t.items.map((it,i)=>{ const ex=exById(it.exId); return `<div class="li"><div class="grow"><div class="t">${esc(ex?ex.name:'Удалено из каталога')}</div><div class="s">${ex?ex.group+' · '+EQUIP[ex.equip]:''}</div>${ex?`<button class="btn sm outline" style="margin-top:6px" data-a="preOpen" data-id="${ex.id}">${(()=>{ const e=buildEntry(ex,gymOf(S.gymId)); const w=(e.sets.find(x=>x.k==='w')||{}).w; return (e.plan.kind==='pre'?'Задан: ':'Вес: ')+(w==null?'не задан':fmt(w)+' кг'); })()}</button>`:''}</div><button class="ib" data-a="tiMove" data-i="${i}" data-d="-1" aria-label="Выше" ${i===0?'disabled':''}>${IC.up}</button><button class="ib" data-a="tiMove" data-i="${i}" data-d="1" aria-label="Ниже" ${i===t.items.length-1?'disabled':''}>${IC.down}</button><button class="ib" data-a="tiDel" data-i="${i}" aria-label="Убрать">${IC.x}</button></div>`; }).join('')||'<p class="muted" style="padding:12px 0">Добавьте упражнения</p>'}</div>
+  <section class="card"><div class="lbl">Упражнения по порядку</div><div class="list">${t.items.map((it,i)=>{ const ex=exById(it.exId); return `<div class="li"><div class="grow"><div class="t">${esc(ex?ex.name:'Удалено из каталога')}</div><div class="s">${ex?ex.group+' · '+EQUIP[ex.equip]:''}</div>${ex?`<button class="btn sm outline" style="margin-top:6px" data-a="preOpen" data-t="${t.id}" data-i="${i}">${(()=>{ const e=buildEntry(ex,gymOf(S.gymId),it.pre); const w=(e.sets.find(x=>x.k==='w')||{}).w; return (e.plan.kind==='pre'?'Задан: ':'Вес: ')+(w==null?'не задан':fmt(w)+' кг'); })()}</button>`:''}</div><button class="ib" data-a="tiMove" data-i="${i}" data-d="-1" aria-label="Выше" ${i===0?'disabled':''}>${IC.up}</button><button class="ib" data-a="tiMove" data-i="${i}" data-d="1" aria-label="Ниже" ${i===t.items.length-1?'disabled':''}>${IC.down}</button><button class="ib" data-a="tiDel" data-i="${i}" aria-label="Убрать">${IC.x}</button></div>`; }).join('')||'<p class="muted" style="padding:12px 0">Добавьте упражнения</p>'}</div>
   <button class="btn wide outline" data-a="tplAddEx">${IC.plus} Добавить упражнения</button></section>
   <div class="btns"><button class="btn" data-a="tplNext" data-id="${t.id}">Сделать следующей</button><button class="btn primary" data-a="start" data-id="${t.id}">Начать сейчас</button></div>
   <button class="btn ghost danger" data-a="tplDelete">Удалить шаблон</button>`;
@@ -806,21 +806,22 @@ function exclChips(ex,gym,act){ const pool=platePool(ex,gym); if(!pool||!pool.le
   <p class="muted" style="font-size:13px">Нажмите на блин, чтобы исключить его из подбора${ex.id&&ex.id[0]!=='_'?' для этого упражнения':''}. Перечёркнутые не используются.</p></div>`; }
 function platesSheet(ei,si){ const e=ACT.entries[ei], s=e.sets[si], ex=exOf(e), gym=gymOf(ACT.gymId); const b=breakdown(ex,gym,s.w);
   openSheet(`<div class="sheet-h"><h2>${fmt(s.w)} кг · ${esc(e.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>${plateDetail(ex,gym,s.w)}${!b.ok&&b.lo!=null?`<div class="btns"><button class="btn" data-a="setNear" data-w="${b.lo}">Взять ${fmt(b.lo)} кг</button><button class="btn" data-a="setNear" data-w="${b.hi}">Взять ${fmt(b.hi)} кг</button></div>`:''}${exById(e.exId)?exclChips(ex,gym,'exclT'):''}`,{ei,si}); }
-function preSheet(){ const st=SHEET, ex=exById(st.exId), gym=gymOf(S.gymId); if(!ex) return closeSheet();
-  const keep=ex.pre; ex.pre=null; const calc=buildEntry(ex,gym); ex.pre=keep;
+function preItem(){ const t=S.templates.find(x=>x.id===SHEET.tid); return t?{t,it:t.items[SHEET.i]}:{}; }
+function preSheet(){ const st=SHEET, {t,it}=preItem(), ex=it&&exById(it.exId), gym=gymOf(S.gymId); if(!ex) return closeSheet();
+  const calc=buildEntry(ex,gym,null); const pre=it.pre;
   const cw=(calc.sets.find(x=>x.k==='w')||{}).w;
-  if(st.w===undefined) st.w=ex.pre&&ex.pre.w!=null?ex.pre.w:(cw!=null?cw:null);
-  if(st.r===undefined) st.r=ex.pre&&ex.pre.r?ex.pre.r:null;
+  if(st.w===undefined) st.w=pre&&pre.w!=null?pre.w:(cw!=null?cw:null);
+  if(st.r===undefined) st.r=pre&&pre.r?pre.r:null;
   const w=st.w;
   $('#sheet').innerHTML=`<div class="grab"></div><div class="sheet-h"><h2>${esc(ex.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>
-  <p class="muted">Вес на следующую тренировку в зале «${esc(gym.name)}». ${cw!=null?`По прогрессии: <b style="color:var(--fg)">${fmt(cw)} кг</b>.`:'Истории пока нет.'}</p>
+  <p class="muted">Шаблон «${esc(t.name)}», зал «${esc(gym.name)}». ${cw!=null?`По прогрессии: <b style="color:var(--fg)">${fmt(cw)} кг</b>.`:'Истории пока нет.'}</p>
   <div class="lbl">Рабочий вес, кг</div>
   <div class="stp" style="height:58px;grid-template-columns:58px 1fr 58px"><button data-a="preStep" data-d="-1" aria-label="Меньше">−</button><input id="preW" data-f="preW" inputmode="decimal" value="${w==null?'':fmt(w)}" placeholder="—" style="font-size:30px" aria-label="Рабочий вес"><button data-a="preStep" data-d="1" aria-label="Больше">+</button></div>
   ${w!=null?`<div class="pl-line" style="padding-left:0">${platesLine(ex,gym,w)}</div>`:''}
   <div class="lbl">Цель по повторениям</div>
   <div class="stp" style="height:48px;grid-template-columns:48px 1fr 48px"><button data-a="preR" data-d="-1" aria-label="Меньше">−</button><input readonly value="${st.r||'по прогрессии'}" style="font-size:${st.r?22:16}px" aria-label="Повторения"><button data-a="preR" data-d="1" aria-label="Больше">+</button></div>
-  <p class="muted" style="font-size:13px">Разминка рассчитается от этого веса. После тренировки заданный вес сбросится, дальше снова считает прогрессия.</p>
-  <div class="btns"><button class="btn" data-a="preClear" ${ex.pre?'':'disabled'}>Сбросить</button><button class="btn primary" data-a="preSave">Сохранить</button></div>`;
+  <p class="muted" style="font-size:13px">Разминка рассчитается от этого веса. Вес действует только в этом шаблоне. После тренировки по нему он сбросится, дальше снова считает прогрессия.</p>
+  <div class="btns"><button class="btn" data-a="preClear" ${pre?'':'disabled'}>Сбросить</button><button class="btn primary" data-a="preSave">Сохранить</button></div>`;
   $('#sheet-wrap').hidden=false; }
 function calcEx(c,gym){ const excl=c.excl||[]; if(c.kind==='bar') return {id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name,excl};
   if(c.kind==='m'){ const m=(gym.machines||[])[c.m]||(gym.machines||[])[0]; return {id:'_cm',equip:'machine',machine:m?m.name:'',step:5,excl}; }
@@ -862,7 +863,7 @@ function viewBackup(){ const f=fin();
 }
 function viewHelp(){ return {head:hdr('Как пользоваться',{back:true}),body:`<section class="card"><h3>Иконка на рабочем столе</h3><p>Откройте адрес приложения в Chrome, нажмите ⋮ и выберите «Установить приложение» или «Добавить на главный экран». После первого открытия оно работает и без интернета.</p></section>
   <section class="card"><h3>Экран и таймер</h3><p>Во время тренировки приложение не даёт экрану погаснуть. В шапке видно состояние: «экран не гаснет». Если там написано другое, нажмите на надпись. Таймер считает от времени окончания, поэтому не сбивается, даже если вы переключились на другое приложение. Сигнал звучит только при открытом приложении.</p></section>
-  <section class="card"><h3>Как идёт прогрессия</h3><p>Отметьте подход галочкой — запустится отдых. Вес и повторы меняйте кнопками ± или впишите вручную. Плюс и минус переходят к следующему весу, который можно собрать из ваших блинов. Если изменить вес первого рабочего подхода, второй и разминка пересчитаются сами. Чтобы удалить подход, нажмите на его номер слева.</p><p>Вес можно задать заранее: на главном экране нажмите на упражнение в карточке следующей тренировки или откройте шаблон в «Ещё → Шаблоны».</p><p>Когда оба рабочих подхода сделаны по ${S.settings.repMax}, на следующей тренировке программа даст новый вес на ${S.settings.repMin} повторений.</p></section>
+  <section class="card"><h3>Как идёт прогрессия</h3><p>Отметьте подход галочкой — запустится отдых. Вес и повторы меняйте кнопками ± или впишите вручную. Плюс и минус переходят к следующему весу, который можно собрать из ваших блинов. Если изменить вес первого рабочего подхода, второй и разминка пересчитаются сами. Чтобы удалить подход, нажмите на его номер слева.</p><p>Вес можно задать заранее, отдельно для каждого шаблона: на главном экране нажмите на упражнение в карточке следующей тренировки или на название другого шаблона.</p><p>Когда оба рабочих подхода сделаны по ${S.settings.repMax}, на следующей тренировке программа даст новый вес на ${S.settings.repMin} повторений.</p></section>
   <section class="card"><h3>Где хранятся данные</h3><p>Только в памяти телефона, никуда не отправляются. Если удалить приложение или очистить данные Chrome, записи пропадут, поэтому сохраняйте копию на Яндекс Диск: «Ещё → Резервная копия → Отправить на Яндекс Диск». Восстановить можно на любом телефоне.</p></section>`}; }
 const TABS={train:()=>ACT?viewWorkout():viewHome(),hist:viewHist,stats:viewStats,body:viewBody,more:viewMore};
 const VIEWS={session:viewSession,exStat:viewExStat,exList:viewExList,exEdit:viewExEdit,tplList:viewTplList,tplEdit:viewTplEdit,gymList:viewGymList,gymEdit:viewGymEdit,calc:viewCalc,settings:viewSettings,backup:viewBackup,help:viewHelp};
@@ -880,7 +881,7 @@ function ctx(el){ const a=el.closest('[data-ei]'), b=el.closest('[data-si]'); co
 function startWorkout(tid){
   if(ACT){ setTab('train'); return; }
   const gym=gymOf(S.gymId), t=tid?S.templates.find(x=>x.id===tid):null;
-  ACT={id:uid(),start:Date.now(),gymId:gym.id,gymName:gym.name,tplId:t?t.id:null,name:t?t.name:'Свободная тренировка',entries:t?t.items.map(i=>exById(i.exId)).filter(Boolean).map(ex=>buildEntry(ex,gym)):[],note:'',timer:null,lu:Date.now()};
+  ACT={id:uid(),start:Date.now(),gymId:gym.id,gymName:gym.name,tplId:t?t.id:null,name:t?t.name:'Свободная тренировка',entries:t?t.items.filter(i=>exById(i.exId)).map(i=>buildEntry(exById(i.exId),gym,i.pre)):[],note:'',timer:null,lu:Date.now()};
   audio(); wakeOn(); saveActive(true); UI.tab='train'; UI.view=null; UI.stack=[]; render(); window.scrollTo(0,0);
 }
 function finishWorkout(){
@@ -891,7 +892,7 @@ function finishWorkout(){
     const ws=e.sets.filter(x=>x.k==='w'); const topW=Math.max(...ws.map(x=>x.w)), bestW=Math.max(...h.map(x=>x.topW)); if(topW>bestW+1e-9) s.prs.push({t:'Вес',name:e.name,from:bestW,to:topW}); });
   if(!s.entries.length){ ACT=null; saveActive(true); wakeOff(); closeSheet(); toast('Нет выполненных подходов — тренировка не сохранена'); setTab('train'); return; }
   SESS.push(s); saveSession(s);
-  s.entries.forEach(e=>{ const ex=exById(e.exId); if(ex&&ex.pre) ex.pre=null; });
+  { const t=S.templates.find(x=>x.id===ACT.tplId); if(t){ const done=new Set(s.entries.map(e=>e.exId)); t.items.forEach(it=>{ if(it.pre&&done.has(it.exId)) it.pre=null; }); } }
   if(ACT.tplId){ const i=S.templates.findIndex(t=>t.id===ACT.tplId); if(i>=0) S.nextTpl=S.templates[(i+1)%S.templates.length].id; }
   ACT=null; saveActive(true); saveState(); wakeOff(); closeSheet();
   UI.tab='hist'; UI.view='session'; UI.id=s.id; UI.stack=[]; UI.fresh=s.id; render(); window.scrollTo(0,0);
@@ -977,11 +978,11 @@ const A={
   cStep:el=>{ const c=UI.calc, gym=gymOf(c.gymId||S.gymId); const ex=calcEx(c,gym); const list=options(ex,gym); c.w=+el.dataset.d>0?upW(list,c.w):downW(list,c.w); render(); },
   cExcl:el=>{ const c=UI.calc, w=+el.dataset.w; c.excl=(c.excl||[]).some(x=>Math.abs(x-w)<1e-9)?c.excl.filter(x=>Math.abs(x-w)>1e-9):[...(c.excl||[]),w]; render(); },
   dExcl:el=>{ const d=UI.draft, w=+el.dataset.w; d.excl=isEx(d,w)?(d.excl||[]).filter(x=>Math.abs(+x-w)>1e-9):[...(d.excl||[]),w]; render(); },
-  preOpen:el=>{ SHEET={exId:el.dataset.id}; preSheet(); },
-  preStep:el=>{ const ex=exById(SHEET.exId), list=options(ex,gymOf(S.gymId)); const w=SHEET.w; SHEET.w=w==null?(list[Math.floor(list.length/6)]??20):(+el.dataset.d>0?upW(list,w):downW(list,w)); preSheet(); },
+  preOpen:el=>{ SHEET={tid:el.dataset.t,i:+el.dataset.i}; preSheet(); },
+  preStep:el=>{ const ex=exById(preItem().it.exId), list=options(ex,gymOf(S.gymId)); const w=SHEET.w; SHEET.w=w==null?(list[Math.floor(list.length/6)]??20):(+el.dataset.d>0?upW(list,w):downW(list,w)); preSheet(); },
   preR:el=>{ const r=SHEET.r||S.settings.repMin; const n=r+(+el.dataset.d); SHEET.r=n<1?null:Math.min(30,n); preSheet(); },
-  preSave:()=>{ const ex=exById(SHEET.exId); if(SHEET.w==null){ toast('Укажите вес'); return; } ex.pre={w:SHEET.w,r:SHEET.r||null}; saveState(); closeSheet(); toast('Вес на следующую тренировку задан'); render(); },
-  preClear:()=>{ const ex=exById(SHEET.exId); ex.pre=null; saveState(); closeSheet(); toast('Вес снова по прогрессии'); render(); },
+  preSave:()=>{ const {it}=preItem(); if(!it) return closeSheet(); if(SHEET.w==null){ toast('Укажите вес'); return; } it.pre={w:SHEET.w,r:SHEET.r||null}; saveState(); closeSheet(); toast('Вес для этого шаблона задан'); render(); },
+  preClear:()=>{ const {it}=preItem(); if(it) it.pre=null; saveState(); closeSheet(); toast('Вес снова по прогрессии'); render(); },
   cSet:el=>{ UI.calc.w=+el.dataset.w; render(); },
   setOpt:el=>{ S.settings[el.dataset.k]=el.dataset.v; if(el.dataset.k==='theme') applyTheme(); saveState(); render(); if(el.dataset.k==='signal'){ audio(); signal('end'); } },
   setNum:el=>{ const k=el.dataset.k, st=S.settings; st[k]=Math.min(+el.dataset.max,Math.max(+el.dataset.min,(+st[k]||0)+(+el.dataset.d))); if(st.repMax<=st.repMin) st.repMax=st.repMin+1; saveState(); render(); },
