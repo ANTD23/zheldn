@@ -136,7 +136,8 @@ select.in{appearance:auto}
 .sets-h span{text-align:center}
 .set{display:grid;grid-template-columns:26px minmax(0,1.2fr) minmax(0,1fr) 48px;gap:6px;align-items:center;padding:4px 2px;border-radius:12px}
 .set.done{background:var(--good-soft)}
-.set-l{font:600 17px var(--f-num);text-align:center;color:var(--fg)}
+.set-l{font:600 17px var(--f-num);text-align:center;color:var(--fg);border:0;background:none;padding:0;height:48px;border-radius:10px;text-decoration:underline dotted var(--muted);text-underline-offset:4px}
+.set-l:active{background:var(--surface2)}
 .set.r .set-l{color:var(--muted);font-size:14px}
 .stp{display:grid;grid-template-columns:36px minmax(0,1fr) 36px;height:48px;background:var(--surface2);border-radius:12px;overflow:hidden}
 .set.done .stp{background:var(--surface)}
@@ -584,7 +585,7 @@ function entryCard(e,ei,gym){
   const ex=exOf(e), done=e.sets.filter(s=>s.done).length, all=e.sets.length, isFin=all&&done===all;
   let wi=0, ri=0;
   const rows=e.sets.map((s,si)=>{ const lab=s.k==='r'?'Р'+(++ri):String(++wi);
-    return `<div data-si="${si}"><div class="set ${s.k} ${s.done?'done':''}"><div class="set-l">${lab}</div>
+    return `<div data-si="${si}"><div class="set ${s.k} ${s.done?'done':''}"><button class="set-l" data-a="setMenu" aria-label="Подход ${lab}: удалить или изменить">${lab}</button>
     <div class="stp"><button data-a="wDn" aria-label="Меньше вес">−</button><input id="w-${e.id}-${si}" data-f="w" inputmode="decimal" value="${s.w==null?'':fmt(s.w)}" placeholder="—" aria-label="Вес, кг"><button data-a="wUp" aria-label="Больше вес">+</button></div>
     <div class="stp"><button data-a="rDn" aria-label="Меньше повторений">−</button><input id="r-${e.id}-${si}" data-f="r" inputmode="numeric" value="${s.r??''}" aria-label="Повторения"><button data-a="rUp" aria-label="Больше повторений">+</button></div>
     <button class="chk" data-a="done" aria-pressed="${s.done}" aria-label="Подход выполнен">${IC.check}</button></div>
@@ -783,7 +784,7 @@ function viewBackup(){ const f=fin();
 }
 function viewHelp(){ return {head:hdr('Как пользоваться',{back:true}),body:`<section class="card"><h3>Иконка на рабочем столе</h3><p>Откройте адрес приложения в Chrome, нажмите ⋮ и выберите «Установить приложение» или «Добавить на главный экран». После первого открытия оно работает и без интернета.</p></section>
   <section class="card"><h3>Экран и таймер</h3><p>Во время тренировки приложение не даёт экрану погаснуть. В шапке видно состояние: «экран не гаснет». Если там написано другое, нажмите на надпись. Таймер считает от времени окончания, поэтому не сбивается, даже если вы переключились на другое приложение. Сигнал звучит только при открытом приложении.</p></section>
-  <section class="card"><h3>Как идёт прогрессия</h3><p>Отметьте подход галочкой — запустится отдых. Вес и повторы меняйте кнопками ± или впишите вручную. Плюс и минус переходят к следующему весу, который можно собрать из ваших блинов. Если изменить вес первого рабочего подхода, второй и разминка пересчитаются сами.</p><p>Когда оба рабочих подхода сделаны по ${S.settings.repMax}, на следующей тренировке программа даст новый вес на ${S.settings.repMin} повторений.</p></section>
+  <section class="card"><h3>Как идёт прогрессия</h3><p>Отметьте подход галочкой — запустится отдых. Вес и повторы меняйте кнопками ± или впишите вручную. Плюс и минус переходят к следующему весу, который можно собрать из ваших блинов. Если изменить вес первого рабочего подхода, второй и разминка пересчитаются сами. Чтобы удалить подход, нажмите на его номер слева.</p><p>Когда оба рабочих подхода сделаны по ${S.settings.repMax}, на следующей тренировке программа даст новый вес на ${S.settings.repMin} повторений.</p></section>
   <section class="card"><h3>Где хранятся данные</h3><p>Только в памяти телефона, никуда не отправляются. Если удалить приложение или очистить данные Chrome, записи пропадут, поэтому сохраняйте копию на Яндекс Диск: «Ещё → Резервная копия → Отправить на Яндекс Диск». Восстановить можно на любом телефоне.</p></section>`}; }
 const TABS={train:()=>ACT?viewWorkout():viewHome(),hist:viewHist,stats:viewStats,body:viewBody,more:viewMore};
 const VIEWS={session:viewSession,exStat:viewExStat,exList:viewExList,exEdit:viewExEdit,tplList:viewTplList,tplEdit:viewTplEdit,gymList:viewGymList,gymEdit:viewGymEdit,calc:viewCalc,settings:viewSettings,backup:viewBackup,help:viewHelp};
@@ -839,6 +840,11 @@ const A={
   setNear:el=>{ const e=ACT.entries[SHEET.ei], si=SHEET.si; e.sets[si].w=+el.dataset.w; propagate(e,si); closeSheet(); saveActive(); render(); },
   exMenu:el=>{ const c=ctx(el); openSheet(`<div class="sheet-h"><h2>${esc(c.e.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>
     <div class="list"><button class="li" data-a="exMv" data-d="-1">Переместить выше</button><button class="li" data-a="exMv" data-d="1">Переместить ниже</button><button class="li" data-a="exRecalc">Пересчитать вес по прогрессии</button><button class="li" data-a="delSet">Удалить последний подход</button><button class="li" data-a="addWarm">Добавить разминочный подход</button><button class="li" data-a="exRm" style="color:var(--bad)">Убрать из тренировки</button></div>`,{ei:c.ei}); },
+  setMenu:el=>{ const c=ctx(el), s=c.s; const lab=el.textContent;
+    openSheet(`<div class="sheet-h"><h2>Подход ${esc(lab)} · ${s.w==null?'—':fmt(s.w)+' кг'} × ${s.r}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>
+    <div class="list"><button class="li" data-a="setKind">${s.k==='r'?'Сделать рабочим':'Сделать разминочным'}</button><button class="li" data-a="setDel" style="color:var(--bad)">Удалить подход</button></div>`,{ei:c.ei,si:c.si}); },
+  setDel:()=>{ const e=ACT.entries[SHEET.ei]; e.sets.splice(SHEET.si,1); closeSheet(); saveActive(); render(); toast('Подход удалён'); },
+  setKind:()=>{ const s=ACT.entries[SHEET.ei].sets[SHEET.si]; s.k=s.k==='r'?'w':'r'; closeSheet(); saveActive(); render(); },
   exMv:el=>{ const i=SHEET.ei, j=i+(+el.dataset.d); if(j<0||j>=ACT.entries.length){ closeSheet(); return; } const a=ACT.entries; [a[i],a[j]]=[a[j],a[i]]; closeSheet(); saveActive(); render(); },
   exRecalc:()=>{ const i=SHEET.ei, e=ACT.entries[i], ex=exById(e.exId); if(ex){ const n=buildEntry(ex,gymOf(ACT.gymId)); n.note=e.note; ACT.entries[i]=n; } closeSheet(); saveActive(); render(); },
   delSet:()=>{ const e=ACT.entries[SHEET.ei]; if(e.sets.length) e.sets.pop(); closeSheet(); saveActive(); render(); },
