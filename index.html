@@ -151,6 +151,10 @@ select.in{appearance:auto}
 .pl-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 2px 4px 34px;border:0;background:none;text-align:left;font-size:13px;min-height:28px;width:100%}
 .pl{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;padding:0 5px;border-radius:5px;font:600 13px var(--f-num);font-style:normal;background:var(--pc);color:var(--pt);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
 .warn{color:var(--bad);font-weight:500}
+.exc{border:0;background:none;padding:4px;border-radius:8px;min-width:44px;min-height:40px;display:grid;place-items:center}
+.exc .pl{height:28px;min-width:40px;font-size:15px}
+.exc.off .pl{opacity:.35;text-decoration:line-through;text-decoration-thickness:2px}
+.exc.off{outline:1.5px dashed var(--muted);outline-offset:-2px}
 .ex-f{display:flex;gap:6px;flex-wrap:wrap}
 .ex-f .btn{flex:1}
 .exnote{font-size:14px;background:var(--surface2);border-radius:10px;padding:8px 10px;white-space:pre-wrap}
@@ -338,18 +342,21 @@ const gymOf=id=>S.gyms.find(g=>g.id===id)||S.gyms[0]||{id:'none',name:'Зал',b
 const exOf=e=>exById(e.exId)||{id:e.exId,name:e.name,equip:e.equip,group:e.group,two:e.two,bar:e.bar||'',machine:e.machine||'',step:e.step||5,warm:true};
 const fin=()=>SESS.filter(s=>!s.del).sort((a,b)=>a.start-b.start);
 function bwNow(){ const b=[...S.body].filter(x=>x.w).sort((a,c)=>a.d<c.d?1:-1)[0]; return b?b.w:(S.settings.bw||null); }
+const isEx=(ex,w)=>(ex.excl||[]).some(x=>Math.abs(+x-w)<1e-9);
+const avail=(arr,ex)=>(arr||[]).filter(p=>!isEx(ex,+p.w));
+function platePool(ex,gym){ if(ex.equip==='barbell') return gym.plates||[]; if(ex.equip==='dumbbell'&&(gym.db||{}).mode!=='fixed') return (gym.db||{}).plates||[]; if(ex.equip==='machine'){ const m=machineFor(ex,gym); if(m&&m.type==='plate') return gym.plates||[]; } return null; }
 function machineFor(ex,gym){ const n=(ex.machine||'').trim().toLowerCase(); if(!n) return null; return ((gym&&gym.machines)||[]).find(m=>(m.name||'').trim().toLowerCase()===n)||null; }
 function barFor(ex,gym){ const bars=(gym&&gym.bars)||[]; const n=(ex.bar||'').trim().toLowerCase(); return bars.find(b=>(b.name||'').trim().toLowerCase()===n)||bars[0]||{name:'Гриф',w:20}; }
 
 let OV=0; const OC=new Map();
 function options(ex,gym){
-  const key=OV+'|'+ex.id+'|'+ex.equip+'|'+(ex.bar||'')+'|'+(ex.machine||'')+'|'+ex.two+'|'+ex.step+'|'+(gym&&gym.id);
+  const key=OV+'|'+ex.id+'|'+ex.equip+'|'+(ex.bar||'')+'|'+(ex.machine||'')+'|'+ex.two+'|'+ex.step+'|'+(ex.excl||[]).join(',')+'|'+(gym&&gym.id);
   if(OC.has(key)) return OC.get(key);
   let list=[];
-  if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const ps=plateSums(gym.plates,2); list=[...ps.m.keys()].map(u=>r2(+bar.w+2*u/100)); }
-  else if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') list=parseList(d.fixed); else { const ps=plateSums(d.plates,ex.two===false?2:4); list=[...ps.m.keys()].map(u=>r2((+d.handle||0)+2*u/100)); } if(!list.length) for(let w=1;w<=60;w++) list.push(w); }
+  if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const ps=plateSums(avail(gym.plates,ex),2); list=[...ps.m.keys()].map(u=>r2(+bar.w+2*u/100)); }
+  else if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') list=parseList(d.fixed); else { const ps=plateSums(avail(d.plates,ex),ex.two===false?2:4); list=[...ps.m.keys()].map(u=>r2((+d.handle||0)+2*u/100)); } if(!list.length) for(let w=1;w<=60;w++) list.push(w); }
   else if(ex.equip==='machine'){ const m=machineFor(ex,gym);
-    if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const ps=plateSums(gym.plates,sd); list=[...ps.m.keys()].map(u=>r2((+m.base||0)+sd*u/100)); }
+    if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const ps=plateSums(avail(gym.plates,ex),sd); list=[...ps.m.keys()].map(u=>r2((+m.base||0)+sd*u/100)); }
     else if(m){ const st=+m.step||5, mn=+m.min||st, mx=Math.max(mn,+m.max||mn); for(let w=mn;w<=mx+1e-9;w+=st) list.push(r2(w)); }
     else { const st=+ex.step||5; for(let w=st;w<=400+1e-9;w+=st) list.push(r2(w)); } }
   else if(ex.equip==='kettlebell'){ list=parseList(gym.kb); if(!list.length) list=[8,12,16,20,24,28,32]; }
@@ -359,12 +366,12 @@ function options(ex,gym){
 function breakdown(ex,gym,w){
   const list=options(ex,gym); const near={lo:floorW(list,w),hi:upW(list,w)};
   const has=list.some(v=>Math.abs(v-w)<1e-9);
-  if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const u=Math.round((w-bar.w)/2*100); const side=u>=0?expandPlates(plateSums(gym.plates,2),u):null; return {kind:'bar',bar,ok:!!side,side:side||[],...near}; }
-  if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') return {kind:'fix',ok:has,...near}; const h=+d.handle||0; const u=Math.round((w-h)/2*100); const side=u>=0?expandPlates(plateSums(d.plates,ex.two===false?2:4),u):null; return {kind:'dbp',bar:{name:'Гриф гантели',w:h},ok:!!side,side:side||[],...near}; }
+  if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const u=Math.round((w-bar.w)/2*100); const side=u>=0?expandPlates(plateSums(avail(gym.plates,ex),2),u):null; return {kind:'bar',bar,ok:!!side,side:side||[],...near}; }
+  if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') return {kind:'fix',ok:has,...near}; const h=+d.handle||0; const u=Math.round((w-h)/2*100); const side=u>=0?expandPlates(plateSums(avail(d.plates,ex),ex.two===false?2:4),u):null; return {kind:'dbp',bar:{name:'Гриф гантели',w:h},ok:!!side,side:side||[],...near}; }
   if(ex.equip==='bodyweight') return {kind:'bw',ok:true,total:(bwNow()||0)+w};
   if(ex.equip==='kettlebell') return {kind:'kb',ok:has,...near};
   const m=machineFor(ex,gym);
-  if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const u=Math.round((w-(+m.base||0))/sd*100); const side=u>=0?expandPlates(plateSums(gym.plates,sd),u):null; return {kind:'mplate',m,sd,bar:{name:m.name,w:+m.base||0},ok:!!side,side:side||[],...near}; }
+  if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const u=Math.round((w-(+m.base||0))/sd*100); const side=u>=0?expandPlates(plateSums(avail(gym.plates,ex),sd),u):null; return {kind:'mplate',m,sd,bar:{name:m.name,w:+m.base||0},ok:!!side,side:side||[],...near}; }
   return {kind:'mach',m,ok:has,...near};
 }
 
@@ -615,7 +622,7 @@ function entryCard(e,ei,gym){
   return `<article class="card ex ${isFin?'fin':''}" data-ei="${ei}">
   <div class="ex-h"><button class="ex-t" data-a="toggleEx" aria-expanded="${!e.col}"><span class="ex-n">${esc(e.name)}</span><span class="ex-m">${done} из ${all} ${plural(all,'подхода','подходов','подходов')} · ${EQUIP[e.equip]||''}${isFin?' · '+ton(entryTon({...e,sets:e.sets.filter(x=>x.done)})):''}</span></button><button class="ib" data-a="exMenu" aria-label="Действия с упражнением">${IC.dots}</button></div>
   ${e.col?'':`${e.plan.note?`<div class="plan ${kindCls}">${esc(e.plan.note)}</div>`:''}
-  ${e.plan.last?`<div class="last">Прошлый раз: <b>${esc(e.plan.last)}</b></div>`:''}
+  ${e.plan.last?`<div class="last">Прошлый раз: <b>${esc(e.plan.last)}</b></div>`:''}${(exOf(e).excl||[]).length?`<div class="last">Без блинов: ${exOf(e).excl.map(w=>fmt(+w)).join(', ')} кг</div>`:''}
   ${e.note?`<div class="exnote">${esc(e.note)}</div>`:''}
   <div class="sets-h"><span></span><span>Вес, кг</span><span>Повторы</span><span></span></div>${rows}
   <div class="ex-f"><button class="btn sm" data-a="addSet" data-k="w">+ Подход</button><button class="btn sm" data-a="exNote">Заметка</button></div>`}
@@ -733,6 +740,7 @@ function viewExEdit(){ const d=UI.draft; if(!d){ UI.view=null; return TABS[UI.ta
     else { const where=S.gyms.filter(g=>machineFor(d,g)).map(g=>g.name); b+=`<p class="muted" style="font-size:13px">Есть в залах: ${where.length?esc(where.join(', ')):'нет'}. Вес и блины считаются по настройкам тренажёра в текущем зале.</p>`; } }
   b+=`<div class="fgrid"><label class="field"><span>${d.equip==='bodyweight'?'Стартовый доп. вес, кг':'Стартовый вес на '+S.settings.repMin+' повт., кг'}</span><input class="in" id="dx_start" data-f="dx" data-k="start" inputmode="decimal" value="${d.start!=null?fmt(d.start):''}" placeholder="—"></label>
   <label class="field"><span>Отдых между рабочими, сек</span><input class="in" id="dx_rest" data-f="dx" data-k="rest" inputmode="numeric" value="${d.rest||''}" placeholder="${S.settings.restWork}"></label></div>
+  ${(()=>{ const pools=S.gyms.map(g=>platePool(d,g)).filter(Boolean); if(!pools.length) return ''; const fake={plates:pools.flat(),db:{mode:'plates',plates:pools.flat()},machines:S.gyms.flatMap(g=>g.machines||[])}; return exclChips(d,fake,'dExcl'); })()}
   <label class="check"><input type="checkbox" id="dx_warm" data-f="dxc" data-k="warm" ${d.warm!==false?'checked':''}> Разминочные подходы</label>
   <label class="field"><span>Заметка (техника, настройки тренажёра)</span><textarea class="in" id="dx_note" data-f="dx" data-k="note">${esc(d.note||'')}</textarea></label></section>
   <button class="btn primary wide big" data-a="exSave">Сохранить</button>${isNew?'':`<button class="btn ghost danger" data-a="exDelete">Удалить из каталога</button>`}`;
@@ -786,9 +794,16 @@ function machineCard(g,m,i){
   :`${f('base','Собственный вес каретки или рычага, кг',fmt(m.base||0))}<div class="field"><span>Куда надеваются блины</span><div class="seg"><button class="${m.sides!==1?'on':''}" data-a="gMSides" data-i="${i}" data-k="2">С двух сторон</button><button class="${m.sides===1?'on':''}" data-a="gMSides" data-i="${i}" data-k="1">С одной стороны</button></div></div>`}
   <p class="muted" style="font-size:13px">Веса: ${rangeTxt(list)}</p></div>`;
 }
-function calcEx(c,gym){ if(c.kind==='bar') return {id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name};
-  if(c.kind==='m'){ const m=(gym.machines||[])[c.m]||(gym.machines||[])[0]; return {id:'_cm',equip:'machine',machine:m?m.name:'',step:5}; }
-  return {id:'_c',equip:'dumbbell',two:c.two}; }
+function exclChips(ex,gym,act){ const pool=platePool(ex,gym); if(!pool||!pool.length) return '';
+  const ws=[...new Set(pool.filter(p=>p.n>0).map(p=>+p.w))].sort((a,b)=>b-a);
+  return `<div class="stack" style="gap:6px"><div class="lbl">Какие блины использовать</div><div class="row wrap" style="gap:6px">${ws.map(w=>{ const off=isEx(ex,w); const [c,t]=plateColor(w);
+    return `<button class="exc ${off?'off':''}" data-a="${act}" data-w="${w}" aria-pressed="${!off}" aria-label="Блин ${fmt(w)} кг: ${off?'исключён':'используется'}"><i class="pl" style="--pc:${c};--pt:${t}">${fmt(w)}</i></button>`; }).join('')}</div>
+  <p class="muted" style="font-size:13px">Нажмите на блин, чтобы исключить его из подбора${ex.id&&ex.id[0]!=='_'?' для этого упражнения':''}. Перечёркнутые не используются.</p></div>`; }
+function platesSheet(ei,si){ const e=ACT.entries[ei], s=e.sets[si], ex=exOf(e), gym=gymOf(ACT.gymId); const b=breakdown(ex,gym,s.w);
+  openSheet(`<div class="sheet-h"><h2>${fmt(s.w)} кг · ${esc(e.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>${plateDetail(ex,gym,s.w)}${!b.ok&&b.lo!=null?`<div class="btns"><button class="btn" data-a="setNear" data-w="${b.lo}">Взять ${fmt(b.lo)} кг</button><button class="btn" data-a="setNear" data-w="${b.hi}">Взять ${fmt(b.hi)} кг</button></div>`:''}${exById(e.exId)?exclChips(ex,gym,'exclT'):''}`,{ei,si}); }
+function calcEx(c,gym){ const excl=c.excl||[]; if(c.kind==='bar') return {id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name,excl};
+  if(c.kind==='m'){ const m=(gym.machines||[])[c.m]||(gym.machines||[])[0]; return {id:'_cm',equip:'machine',machine:m?m.name:'',step:5,excl}; }
+  return {id:'_c',equip:'dumbbell',two:c.two,excl}; }
 function viewCalc(){ const c=UI.calc; const gym=gymOf(c.gymId||S.gymId);
   if(c.kind==='m'&&!(gym.machines||[]).some(m=>m.type==='plate')) c.kind='bar';
   const ex=calcEx(c,gym);
@@ -798,7 +813,7 @@ function viewCalc(){ const c=UI.calc; const gym=gymOf(c.gymId||S.gymId);
   if(c.kind==='m'){} else if(c.kind==='bar') b+=`<label class="field"><span>Гриф</span><select class="in" id="cBar" data-f="cBar">${gym.bars.map((x,i)=>`<option value="${i}" ${i===c.bar?'selected':''}>${esc(x.name)} · ${fmt(x.w)} кг</option>`).join('')}</select></label>`;
   else if(gym.db.mode==='plates') b+=`<label class="check"><input type="checkbox" id="cTwo" data-f="cTwo" ${c.two?'checked':''}> Собираю две гантели</label>`;
   b+=`<section class="card"><div class="lbl">${c.kind==='bar'?'Вес штанги':c.kind==='m'?'Вес на тренажёре':'Вес одной гантели'}, кг</div><div class="stp" style="height:58px;grid-template-columns:58px 1fr 58px"><button data-a="cStep" data-d="-1" aria-label="Меньше">−</button><input id="cW" data-f="cW" inputmode="decimal" value="${fmt(c.w)}" style="font-size:30px" aria-label="Вес"><button data-a="cStep" data-d="1" aria-label="Больше">+</button></div>
-  ${plateDetail(ex,gym,c.w)}${!breakdown(ex,gym,c.w).ok?(()=>{const bd=breakdown(ex,gym,c.w);return `<div class="btns"><button class="btn" data-a="cSet" data-w="${bd.lo}">${fmt(bd.lo)} кг</button><button class="btn" data-a="cSet" data-w="${bd.hi}">${fmt(bd.hi)} кг</button></div>`;})():''}</section>`;
+  ${plateDetail(ex,gym,c.w)}${exclChips(ex,gym,'cExcl')}${!breakdown(ex,gym,c.w).ok?(()=>{const bd=breakdown(ex,gym,c.w);return `<div class="btns"><button class="btn" data-a="cSet" data-w="${bd.lo}">${fmt(bd.lo)} кг</button><button class="btn" data-a="cSet" data-w="${bd.hi}">${fmt(bd.hi)} кг</button></div>`;})():''}</section>`;
   return {head:hdr('Калькулятор блинов',{back:UI.stack.length>0}),body:b};
 }
 function stepRow(k,label,step,min,max,isSec){ const v=S.settings[k]; return `<div class="row"><div class="grow">${label}</div><div class="stp" style="width:150px;height:44px"><button data-a="setNum" data-k="${k}" data-d="${-step}" data-min="${min}" data-max="${max}" aria-label="Меньше">−</button><input readonly value="${isSec?(v?fmtSec(v):'нет'):v}" aria-label="${label}" style="font-size:19px"><button data-a="setNum" data-k="${k}" data-d="${step}" data-min="${min}" data-max="${max}" aria-label="Больше">+</button></div></div>`; }
@@ -877,8 +892,10 @@ const A={
     if(s.done){ const sec=restAfter(c.ei,c.si); const nx=c.e.sets[c.si+1]; const lbl=nx?(nx.k==='r'?'Отдых перед разминкой':'Отдых перед рабочим подходом'):'Отдых перед следующим упражнением'; if(sec) startRest(sec,lbl);
       if(c.e.sets.every(x=>x.done)) c.e.col=true; }
     ACT.lu=Date.now(); saveActive(); render(); },
-  plates:el=>{ const c=ctx(el); const ex=exOf(c.e), gym=gymOf(ACT.gymId); const b=breakdown(ex,gym,c.s.w);
-    openSheet(`<div class="sheet-h"><h2>${fmt(c.s.w)} кг · ${esc(c.e.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>${plateDetail(ex,gym,c.s.w)}${!b.ok&&b.lo!=null?`<div class="btns"><button class="btn" data-a="setNear" data-w="${b.lo}">Взять ${fmt(b.lo)} кг</button><button class="btn" data-a="setNear" data-w="${b.hi}">Взять ${fmt(b.hi)} кг</button></div>`:''}`,{ei:c.ei,si:c.si}); },
+  plates:el=>{ const c=ctx(el); platesSheet(c.ei,c.si); },
+  exclT:el=>{ const {ei,si}=SHEET; const e=ACT.entries[ei], ex=exById(e.exId); if(!ex) return; const w=+el.dataset.w;
+    ex.excl=isEx(ex,w)?(ex.excl||[]).filter(x=>Math.abs(+x-w)>1e-9):[...(ex.excl||[]),w];
+    saveState(); render(); platesSheet(ei,si); },
   setNear:el=>{ const e=ACT.entries[SHEET.ei], si=SHEET.si; e.sets[si].w=+el.dataset.w; propagate(e,si); closeSheet(); saveActive(); render(); },
   exMenu:el=>{ const c=ctx(el); openSheet(`<div class="sheet-h"><h2>${esc(c.e.name)}</h2><button class="ib" data-a="closeSheet" aria-label="Закрыть">${IC.x}</button></div>
     <div class="list"><button class="li" data-a="exMv" data-d="-1">Переместить выше</button><button class="li" data-a="exMv" data-d="1">Переместить ниже</button><button class="li" data-a="exRecalc">Пересчитать вес по прогрессии</button><button class="li" data-a="delSet">Удалить последний подход</button><button class="li" data-a="addWarm">Добавить разминочный подход</button><button class="li" data-a="exRm" style="color:var(--bad)">Убрать из тренировки</button></div>`,{ei:c.ei}); },
@@ -936,6 +953,8 @@ const A={
   gDelete:()=>confirmSheet('Удалить зал?','Инвентарь этого зала будет удалён.','Удалить',()=>{ S.gyms=S.gyms.filter(x=>x.id!==UI.id); if(S.gymId===UI.id) S.gymId=S.gyms[0].id; saveState(); back(); },true),
   cKind:el=>{ UI.calc.kind=el.dataset.k; if(el.dataset.k==='m'){ const g=gymOf(UI.calc.gymId||S.gymId); UI.calc.m=Math.max(0,(g.machines||[]).findIndex(m=>m.type==='plate')); } UI.calc.w=el.dataset.k==='bar'?Math.max(UI.calc.w,20):Math.min(UI.calc.w,30); render(); },
   cStep:el=>{ const c=UI.calc, gym=gymOf(c.gymId||S.gymId); const ex=calcEx(c,gym); const list=options(ex,gym); c.w=+el.dataset.d>0?upW(list,c.w):downW(list,c.w); render(); },
+  cExcl:el=>{ const c=UI.calc, w=+el.dataset.w; c.excl=(c.excl||[]).some(x=>Math.abs(x-w)<1e-9)?c.excl.filter(x=>Math.abs(x-w)>1e-9):[...(c.excl||[]),w]; render(); },
+  dExcl:el=>{ const d=UI.draft, w=+el.dataset.w; d.excl=isEx(d,w)?(d.excl||[]).filter(x=>Math.abs(+x-w)>1e-9):[...(d.excl||[]),w]; render(); },
   cSet:el=>{ UI.calc.w=+el.dataset.w; render(); },
   setOpt:el=>{ S.settings[el.dataset.k]=el.dataset.v; if(el.dataset.k==='theme') applyTheme(); saveState(); render(); if(el.dataset.k==='signal'){ audio(); signal('end'); } },
   setNum:el=>{ const k=el.dataset.k, st=S.settings; st[k]=Math.min(+el.dataset.max,Math.max(+el.dataset.min,(+st[k]||0)+(+el.dataset.d))); if(st.repMax<=st.repMin) st.repMax=st.repMin+1; saveState(); render(); },
