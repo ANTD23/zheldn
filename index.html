@@ -68,6 +68,7 @@ p{margin:0}
 .card{width:100%;background:var(--surface);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;min-width:0}
 .btn{min-height:48px;border-radius:12px;border:0;font-weight:600;font-size:16px;padding:0 16px;background:var(--surface2);color:var(--fg);display:inline-flex;align-items:center;justify-content:center;gap:8px;text-align:center}
 .btn:active{filter:brightness(.94)}
+.btn svg{width:20px;height:20px;flex:none}
 .btn.primary{background:var(--accent);color:var(--accent-ink)}
 .btn.wide{width:100%}
 .btn.big{min-height:58px;font-size:18px}
@@ -283,7 +284,8 @@ const plural=(n,a,b,c)=>{const m10=n%10,m100=n%100; return m10===1&&m100!==11?a:
 
 /* ---------- seed data ---------- */
 const GROUPS=['Грудь','Спина','Ноги','Ягодицы','Плечи','Бицепс','Трицепс','Предплечья','Икры','Пресс'];
-const EQUIP={barbell:'Штанга',dumbbell:'Гантели',machine:'Тренажёр / блок',bodyweight:'Свой вес'};
+const EQUIP={barbell:'Штанга',dumbbell:'Гантели',machine:'Тренажёр',kettlebell:'Гиря',bodyweight:'Свой вес'};
+const MTYPE={stack:'С плитками',plate:'Под блины'};
 const DEF_SETTINGS={theme:'auto',signal:'both',pre:10,restWarm:0,restAfterWarm:180,restWork:180,restNext:180,backupDays:7,workSets:2,repMin:6,repMax:10,warm:[{p:50,r:10},{p:80,r:5}],bw:null};
 const SEED=[
 ['squat','Приседания со штангой','Ноги','barbell'],['front','Фронтальные приседания','Ноги','barbell'],['deadlift','Становая тяга','Спина','barbell'],
@@ -297,26 +299,32 @@ const SEED=[
 ['rear_db','Махи гантелями в наклоне','Плечи','dumbbell'],['curl_db','Подъём гантелей на бицепс','Бицепс','dumbbell'],['hammer','Молотки','Бицепс','dumbbell'],
 ['ohext_db','Разгибание гантели из-за головы','Трицепс','dumbbell',{two:false}],['bulg','Болгарские выпады с гантелями','Ноги','dumbbell'],
 ['goblet','Гоблет-приседания','Ноги','dumbbell',{two:false}],['shrug_db','Шраги с гантелями','Спина','dumbbell'],
-['legpress','Жим ногами','Ноги','machine',{step:10}],['legext','Разгибание ног в тренажёре','Ноги','machine'],['legcurl','Сгибание ног в тренажёре','Ноги','machine'],
-['latpull','Тяга верхнего блока','Спина','machine'],['cablerow','Тяга горизонтального блока','Спина','machine'],['chestpress','Жим от груди в тренажёре','Грудь','machine'],
-['pecdeck','Сведение рук в тренажёре','Грудь','machine'],['crossover','Сведение в кроссовере','Грудь','machine',{step:2.5}],
-['pushdown','Разгибание рук на блоке','Трицепс','machine',{step:2.5}],['cablecurl','Сгибание рук на нижнем блоке','Бицепс','machine',{step:2.5}],
-['calf','Подъём на носки в тренажёре','Икры','machine'],
+['legpress','Жим ногами','Ноги','machine',{step:10,machine:'Жим ногами'}],['legext','Разгибание ног в тренажёре','Ноги','machine'],['legcurl','Сгибание ног в тренажёре','Ноги','machine'],
+['latpull','Тяга верхнего блока','Спина','machine',{machine:'Верхний блок'}],['cablerow','Тяга горизонтального блока','Спина','machine',{machine:'Нижний блок'}],['chestpress','Жим от груди в тренажёре','Грудь','machine'],
+['pecdeck','Сведение рук в тренажёре','Грудь','machine'],['crossover','Сведение в кроссовере','Грудь','machine',{step:2.5,machine:'Кроссовер'}],
+['pushdown','Разгибание рук на блоке','Трицепс','machine',{step:2.5,machine:'Кроссовер'}],['cablecurl','Сгибание рук на нижнем блоке','Бицепс','machine',{step:2.5,machine:'Кроссовер'}],
+['calf','Подъём на носки в тренажёре','Икры','machine'],['smithsq','Приседания в Смите','Ноги','machine',{machine:'Тренажёр Смита'}],
+['kbswing','Махи гирей','Ягодицы','kettlebell',{warm:false}],['kbpress','Жим гири стоя','Плечи','kettlebell'],['kbgoblet','Гоблет-приседания с гирей','Ноги','kettlebell'],
 ['pullup','Подтягивания','Спина','bodyweight'],['dips','Отжимания на брусьях','Грудь','bodyweight'],['pushup','Отжимания от пола','Грудь','bodyweight'],
 ['hyper','Гиперэкстензия','Спина','bodyweight'],['legraise','Подъём ног в висе','Пресс','bodyweight'],['crunch','Скручивания','Пресс','bodyweight'],
 ];
-function seedExercises(){ return SEED.map(([id,name,group,equip,extra])=>Object.assign({id:'x_'+id,name,group,equip,bar:equip==='barbell'?'Олимпийский':'',two:true,step:5,start:null,rest:null,warm:equip!=='bodyweight',note:''},extra||{})); }
+function seedExercises(){ return SEED.map(([id,name,group,equip,extra])=>Object.assign({id:'x_'+id,name,group,equip,bar:equip==='barbell'?'Олимпийский':'',machine:'',two:true,step:5,start:null,rest:null,warm:equip!=='bodyweight',note:''},extra||{})); }
 function seedGyms(){ const fixed=[];for(let w=2;w<=50;w+=2) fixed.push(w);
   return [
-  {id:'g_d23',name:'D23',bars:[{name:'Олимпийский',w:20},{name:'EZ',w:10}],plates:[{w:25,n:2},{w:20,n:4},{w:15,n:2},{w:10,n:4},{w:5,n:4},{w:2.5,n:4},{w:1.25,n:4}],db:{mode:'plates',handle:2,plates:[{w:5,n:4},{w:2.5,n:8},{w:1.25,n:8}],fixed:''}},
-  {id:'g_ddx',name:'DDX',bars:[{name:'Олимпийский',w:20},{name:'EZ',w:10}],plates:[{w:25,n:8},{w:20,n:8},{w:15,n:4},{w:10,n:8},{w:5,n:8},{w:2.5,n:8},{w:1.25,n:4}],db:{mode:'fixed',handle:2,plates:[],fixed:fixed.join(', ')}}];}
+  {id:'g_d23',name:'D23',bars:[{name:'Олимпийский',w:20},{name:'EZ',w:10}],plates:[{w:25,n:2},{w:20,n:4},{w:15,n:2},{w:10,n:4},{w:5,n:4},{w:2.5,n:4},{w:1.25,n:4}],db:{mode:'plates',handle:2,plates:[{w:5,n:4},{w:2.5,n:8},{w:1.25,n:8}],fixed:''},machines:[],kb:'16, 24, 32'},
+  {id:'g_ddx',name:'DDX',bars:[{name:'Олимпийский',w:20},{name:'EZ',w:10}],plates:[{w:25,n:8},{w:20,n:8},{w:15,n:4},{w:10,n:8},{w:5,n:8},{w:2.5,n:8},{w:1.25,n:4}],db:{mode:'fixed',handle:2,plates:[],fixed:fixed.join(', ')},machines:ddxMachines(),kb:'8, 12, 16, 20, 24, 28, 32'}];}
+function ddxMachines(){ return [{id:'m1',name:'Верхний блок',type:'stack',step:5,min:5,max:100},{id:'m2',name:'Нижний блок',type:'stack',step:5,min:5,max:100},{id:'m3',name:'Кроссовер',type:'stack',step:2.5,min:2.5,max:50},{id:'m4',name:'Жим ногами',type:'plate',base:0,sides:2},{id:'m5',name:'Тренажёр Смита',type:'plate',base:15,sides:2}]; }
 function freshState(){
   const T=(id,name,ids)=>({id,name,items:ids.map(i=>({exId:'x_'+i}))});
-  return {v:1,_u:0,settings:clone(DEF_SETTINGS),gyms:seedGyms(),gymId:'g_d23',exercises:seedExercises(),
+  return {v:2,_u:0,settings:clone(DEF_SETTINGS),gyms:seedGyms(),gymId:'g_d23',exercises:seedExercises(),
     templates:[T('t_a','Тренировка А',['squat','bench','row','ohp_db']),T('t_b','Тренировка Б',['deadlift','ohp','pullup','curl_ez']),T('t_c','Тренировка В',['legpress','incline','latpull','pushdown'])],
     nextTpl:'t_a',body:[],hint:true};
 }
-function migrate(s){ s.settings=Object.assign(clone(DEF_SETTINGS),s.settings||{}); s.gyms=s.gyms||[]; s.exercises=s.exercises||[]; s.templates=s.templates||[]; s.body=s.body||[]; return s; }
+function migrate(s){ s.settings=Object.assign(clone(DEF_SETTINGS),s.settings||{}); s.gyms=s.gyms||[]; s.exercises=s.exercises||[]; s.templates=s.templates||[]; s.body=s.body||[];
+  s.gyms.forEach(g=>{ if(!Array.isArray(g.machines)) g.machines=g.id==='g_ddx'&&(s.v||1)<2?ddxMachines():[]; if(g.kb==null) g.kb=g.id==='g_ddx'?'8, 12, 16, 20, 24, 28, 32':''; g.machines.forEach(m=>{ if(!m.id) m.id='m'+uid(); }); });
+  if((s.v||1)<2){ const seed=seedExercises(); seed.forEach(x=>{ const e=s.exercises.find(y=>y.id===x.id); if(e){ if(e.machine==null&&x.machine) e.machine=x.machine; } else if(['kettlebell'].includes(x.equip)||x.id==='x_smithsq') s.exercises.push(x); }); s.v=2; }
+  s.exercises.forEach(e=>{ if(e.machine==null) e.machine=''; });
+  return s; }
 
 /* ---------- state ---------- */
 let S=freshState(), SESS=[], ACT=null;
@@ -327,19 +335,24 @@ function lsSet(){ try{ localStorage.setItem(LS,JSON.stringify({S,SESS,ACT})); }c
 
 const exById=id=>S.exercises.find(x=>x.id===id);
 const gymOf=id=>S.gyms.find(g=>g.id===id)||S.gyms[0]||{id:'none',name:'Зал',bars:[{name:'Олимпийский',w:20}],plates:[],db:{mode:'fixed',handle:2,plates:[],fixed:''}};
-const exOf=e=>exById(e.exId)||{id:e.exId,name:e.name,equip:e.equip,group:e.group,two:e.two,bar:e.bar||'',step:e.step||5,warm:true};
+const exOf=e=>exById(e.exId)||{id:e.exId,name:e.name,equip:e.equip,group:e.group,two:e.two,bar:e.bar||'',machine:e.machine||'',step:e.step||5,warm:true};
 const fin=()=>SESS.filter(s=>!s.del).sort((a,b)=>a.start-b.start);
 function bwNow(){ const b=[...S.body].filter(x=>x.w).sort((a,c)=>a.d<c.d?1:-1)[0]; return b?b.w:(S.settings.bw||null); }
+function machineFor(ex,gym){ const n=(ex.machine||'').trim().toLowerCase(); if(!n) return null; return ((gym&&gym.machines)||[]).find(m=>(m.name||'').trim().toLowerCase()===n)||null; }
 function barFor(ex,gym){ const bars=(gym&&gym.bars)||[]; const n=(ex.bar||'').trim().toLowerCase(); return bars.find(b=>(b.name||'').trim().toLowerCase()===n)||bars[0]||{name:'Гриф',w:20}; }
 
 let OV=0; const OC=new Map();
 function options(ex,gym){
-  const key=OV+'|'+ex.id+'|'+ex.equip+'|'+(ex.bar||'')+'|'+ex.two+'|'+ex.step+'|'+(gym&&gym.id);
+  const key=OV+'|'+ex.id+'|'+ex.equip+'|'+(ex.bar||'')+'|'+(ex.machine||'')+'|'+ex.two+'|'+ex.step+'|'+(gym&&gym.id);
   if(OC.has(key)) return OC.get(key);
   let list=[];
   if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const ps=plateSums(gym.plates,2); list=[...ps.m.keys()].map(u=>r2(+bar.w+2*u/100)); }
   else if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') list=parseList(d.fixed); else { const ps=plateSums(d.plates,ex.two===false?2:4); list=[...ps.m.keys()].map(u=>r2((+d.handle||0)+2*u/100)); } if(!list.length) for(let w=1;w<=60;w++) list.push(w); }
-  else if(ex.equip==='machine'){ const st=+ex.step||5; for(let w=st;w<=400+1e-9;w+=st) list.push(r2(w)); }
+  else if(ex.equip==='machine'){ const m=machineFor(ex,gym);
+    if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const ps=plateSums(gym.plates,sd); list=[...ps.m.keys()].map(u=>r2((+m.base||0)+sd*u/100)); }
+    else if(m){ const st=+m.step||5, mn=+m.min||st, mx=Math.max(mn,+m.max||mn); for(let w=mn;w<=mx+1e-9;w+=st) list.push(r2(w)); }
+    else { const st=+ex.step||5; for(let w=st;w<=400+1e-9;w+=st) list.push(r2(w)); } }
+  else if(ex.equip==='kettlebell'){ list=parseList(gym.kb); if(!list.length) list=[8,12,16,20,24,28,32]; }
   else { for(let w=0;w<=100+1e-9;w+=1.25) list.push(r2(w)); }
   list=[...new Set(list)].sort((a,b)=>a-b); OC.set(key,list); return list;
 }
@@ -349,7 +362,10 @@ function breakdown(ex,gym,w){
   if(ex.equip==='barbell'){ const bar=barFor(ex,gym); const u=Math.round((w-bar.w)/2*100); const side=u>=0?expandPlates(plateSums(gym.plates,2),u):null; return {kind:'bar',bar,ok:!!side,side:side||[],...near}; }
   if(ex.equip==='dumbbell'){ const d=gym.db||{}; if(d.mode==='fixed') return {kind:'fix',ok:has,...near}; const h=+d.handle||0; const u=Math.round((w-h)/2*100); const side=u>=0?expandPlates(plateSums(d.plates,ex.two===false?2:4),u):null; return {kind:'dbp',bar:{name:'Гриф гантели',w:h},ok:!!side,side:side||[],...near}; }
   if(ex.equip==='bodyweight') return {kind:'bw',ok:true,total:(bwNow()||0)+w};
-  return {kind:'mach',ok:has,...near};
+  if(ex.equip==='kettlebell') return {kind:'kb',ok:has,...near};
+  const m=machineFor(ex,gym);
+  if(m&&m.type==='plate'){ const sd=m.sides===1?1:2; const u=Math.round((w-(+m.base||0))/sd*100); const side=u>=0?expandPlates(plateSums(gym.plates,sd),u):null; return {kind:'mplate',m,sd,bar:{name:m.name,w:+m.base||0},ok:!!side,side:side||[],...near}; }
+  return {kind:'mach',m,ok:has,...near};
 }
 
 /* ---------- calculations over history ---------- */
@@ -380,7 +396,7 @@ function buildEntry(ex,gym){
   const sets=[];
   if(ex.warm!==false) st.warm.forEach(wu=>sets.push({k:'r',w:W!=null?floorW(list,W*wu.p/100):null,r:wu.r,done:false}));
   for(let i=0;i<nW;i++) sets.push({k:'w',w:W,r:reps[i]??st.repMin,done:false});
-  return {id:uid(),exId:ex.id,name:ex.name,equip:ex.equip,group:ex.group,two:ex.two,bar:ex.bar,step:ex.step,bw:ex.equip==='bodyweight'?bwNow():null,plan:{kind,note,last},sets,note:'',col:false};
+  return {id:uid(),exId:ex.id,name:ex.name,equip:ex.equip,group:ex.group,two:ex.two,bar:ex.bar,machine:ex.machine,step:ex.step,bw:ex.equip==='bodyweight'?bwNow():null,plan:{kind,note,last},sets,note:'',col:false};
 }
 function propagate(e,si){
   const ex=exOf(e), gym=gymOf(ACT.gymId), list=options(ex,gym), s=e.sets[si];
@@ -478,9 +494,11 @@ function platesLine(ex,gym,w){
     if(!b.side.length) return `<span class="muted">${b.kind==='bar'?'пустой гриф':'пустой гриф гантели'}</span>`;
     return `<span class="muted">${b.kind==='bar'?'на сторону':'на сторону гантели'}</span>${b.side.map(plateChip).join('')}`;
   }
+  if(b.kind==='mplate'){ if(!b.ok) return `<span class="warn">Не собрать из блинов зала · ${fmt(b.lo)} / ${fmt(b.hi)}</span>`; if(!b.side.length) return `<span class="muted">без блинов</span>`; return `<span class="muted">${b.sd===1?'на тренажёр':'на сторону'}</span>${b.side.map(plateChip).join('')}`; }
+  if(b.kind==='kb') return b.ok?`<span class="muted">гиря ${fmt(w)} кг</span>`:`<span class="warn">Нет такой гири · ${fmt(b.lo)} / ${fmt(b.hi)}</span>`;
   if(b.kind==='fix') return b.ok?`<span class="muted">гантели по ${fmt(w)} кг</span>`:`<span class="warn">Нет таких гантелей · ${fmt(b.lo)} / ${fmt(b.hi)}</span>`;
   if(b.kind==='bw') return `<span class="muted">с весом тела: ${fmt(b.total,1)} кг</span>`;
-  return b.ok?'':`<span class="warn">Шаг тренажёра ${fmt(ex.step)} кг · ${fmt(b.lo)} / ${fmt(b.hi)}</span>`;
+  return b.ok?(b.m?`<span class="muted">${esc(b.m.name)}</span>`:''):`<span class="warn">${b.m?'Нет такого веса на «'+esc(b.m.name)+'»':'Шаг тренажёра '+fmt(ex.step)+' кг'} · ${fmt(b.lo)} / ${fmt(b.hi)}</span>`;
 }
 function plateDetail(ex,gym,w){
   const b=breakdown(ex,gym,w);
@@ -490,9 +508,12 @@ function plateDetail(ex,gym,w){
     <p>${esc(b.bar.name)} ${fmt(b.bar.w)} кг + на каждую сторону: ${b.side.length?b.side.map(plateChip).join(' '):'ничего'}</p>
     ${b.kind==='dbp'&&ex.two!==false?'<p class="muted">Блины указаны для одной гантели. Соберите две одинаковые.</p>':''}`;
   }
+  if(b.kind==='mplate'){ if(!b.ok) return `<p class="warn">Этот вес не собрать на «${esc(b.m.name)}» из блинов зала «${esc(gym.name)}».</p>`;
+    return `<div class="diagram">${b.sd===2?plateSvg(b.side,b.m.name,+b.m.base||0):''}</div><p>${esc(b.m.name)}${b.m.base?' (собственный вес '+fmt(b.m.base)+' кг)':''} + ${b.sd===2?'на каждую сторону':'на тренажёр'}: ${b.side.length?b.side.map(plateChip).join(' '):'ничего'}</p>`; }
+  if(b.kind==='kb') return b.ok?`<p>Возьмите гирю <b>${fmt(w)} кг</b>.</p>`:`<p class="warn">Гири ${fmt(w)} кг в этом зале нет.</p>`;
   if(b.kind==='fix') return b.ok?`<p>Возьмите гантели по <b>${fmt(w)} кг</b>.</p>`:`<p class="warn">Гантелей ${fmt(w)} кг в этом зале нет.</p>`;
   if(b.kind==='bw') return `<p>Добавочный вес ${fmt(w)} кг. С весом тела — ${fmt(b.total,1)} кг.</p>`;
-  return `<p>Тренажёр, шаг плиток ${fmt(ex.step)} кг.</p>`;
+  return b.m?`<p>${esc(b.m.name)}: плитки от ${fmt(b.m.min)} до ${fmt(b.m.max)} кг, шаг ${fmt(b.m.step)} кг.</p>${b.ok?'':`<p class="warn">Такого веса на тренажёре нет.</p>`}`:`<p>Тренажёр, шаг плиток ${fmt(ex.step)} кг. Привяжите упражнение к тренажёру зала, чтобы учитывать его диапазон.</p>`;
 }
 
 /* ---------- charts ---------- */
@@ -706,7 +727,10 @@ function viewExEdit(){ const d=UI.draft; if(!d){ UI.view=null; return TABS[UI.ta
   <label class="field"><span>Снаряд</span><select class="in" id="dx_equip" data-f="dx" data-k="equip">${Object.entries(EQUIP).map(([k,l])=>`<option value="${k}" ${k===d.equip?'selected':''}>${l}</option>`).join('')}</select></label></div>`;
   if(d.equip==='barbell') b+=`<label class="field"><span>Гриф</span><select class="in" id="dx_bar" data-f="dx" data-k="bar">${barNames.map(n=>`<option ${n===d.bar?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   if(d.equip==='dumbbell') b+=`<label class="check"><input type="checkbox" id="dx_two" data-f="dxc" data-k="two" ${d.two!==false?'checked':''}> Две гантели (тоннаж считается за обе)</label>`;
-  if(d.equip==='machine') b+=`<label class="field"><span>Шаг плиток, кг</span><input class="in" id="dx_step" data-f="dx" data-k="step" inputmode="decimal" value="${fmt(d.step)}"></label>`;
+  if(d.equip==='machine'){ const mn=[...new Set(S.gyms.flatMap(g=>(g.machines||[]).map(m=>m.name)).filter(Boolean))]; if(d.machine&&!mn.includes(d.machine)) mn.push(d.machine);
+    b+=`<label class="field"><span>Тренажёр</span><select class="in" id="dx_machine" data-f="dx" data-k="machine"><option value="" ${!d.machine?'selected':''}>Не выбран — указать шаг вручную</option>${mn.map(n=>`<option ${n===d.machine?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+    if(!d.machine) b+=`<label class="field"><span>Шаг плиток, кг</span><input class="in" id="dx_step" data-f="dx" data-k="step" inputmode="decimal" value="${fmt(d.step)}"></label>`;
+    else { const where=S.gyms.filter(g=>machineFor(d,g)).map(g=>g.name); b+=`<p class="muted" style="font-size:13px">Есть в залах: ${where.length?esc(where.join(', ')):'нет'}. Вес и блины считаются по настройкам тренажёра в текущем зале.</p>`; } }
   b+=`<div class="fgrid"><label class="field"><span>${d.equip==='bodyweight'?'Стартовый доп. вес, кг':'Стартовый вес на '+S.settings.repMin+' повт., кг'}</span><input class="in" id="dx_start" data-f="dx" data-k="start" inputmode="decimal" value="${d.start!=null?fmt(d.start):''}" placeholder="—"></label>
   <label class="field"><span>Отдых между рабочими, сек</span><input class="in" id="dx_rest" data-f="dx" data-k="rest" inputmode="numeric" value="${d.rest||''}" placeholder="${S.settings.restWork}"></label></div>
   <label class="check"><input type="checkbox" id="dx_warm" data-f="dxc" data-k="warm" ${d.warm!==false?'checked':''}> Разминочные подходы</label>
@@ -730,7 +754,7 @@ function viewTplEdit(){ const t=S.templates.find(x=>x.id===UI.id); if(!t){ UI.vi
   return {head:hdr('Шаблон',{back:true}),body:b};
 }
 function viewGymList(){
-  let b=`<section class="card"><div class="list">${S.gyms.map(g=>`<button class="li" data-a="go" data-v="gymEdit" data-id="${g.id}"><div class="grow"><div class="t">${esc(g.name)} ${g.id===S.gymId?'<span class="badge acc">текущий</span>':''}</div><div class="s">${g.bars.map(x=>esc(x.name)+' '+fmt(x.w)).join(', ')} · гантели ${g.db.mode==='fixed'?'готовые':'наборные'}</div></div><span class="chev">${IC.chev}</span></button>`).join('')}</div></section>`;
+  let b=`<section class="card"><div class="list">${S.gyms.map(g=>`<button class="li" data-a="go" data-v="gymEdit" data-id="${g.id}"><div class="grow"><div class="t">${esc(g.name)} ${g.id===S.gymId?'<span class="badge acc">текущий</span>':''}</div><div class="s">${g.bars.map(x=>esc(x.name)+' '+fmt(x.w)).join(', ')} · гантели ${g.db.mode==='fixed'?'готовые':'наборные'}${(g.machines||[]).length?' · тренажёров: '+g.machines.length:''}</div></div><span class="chev">${IC.chev}</span></button>`).join('')}</div></section>`;
   return {head:hdr('Залы',{back:true,right:`<button class="btn primary sm" data-a="gymNew">${IC.plus} Новый</button>`}),body:b};
 }
 function rangeTxt(list){ if(!list.length) return 'нет'; let st=Infinity; for(let i=1;i<list.length;i++) st=Math.min(st,list[i]-list[i-1]); return `${fmt(list[0])}–${fmt(list[list.length-1])} кг${isFinite(st)?', шаг от '+fmt(st)+' кг':''}`; }
@@ -746,16 +770,34 @@ function viewGymEdit(){ const g=S.gyms.find(x=>x.id===UI.id); if(!g){ UI.view=nu
   <section class="card"><div class="lbl">Гантели</div><div class="seg"><button class="${g.db.mode==='plates'?'on':''}" data-a="gDbMode" data-k="plates">Наборные</button><button class="${g.db.mode==='fixed'?'on':''}" data-a="gDbMode" data-k="fixed">Готовые</button></div>`;
   if(g.db.mode==='plates') b+=`<label class="field"><span>Вес грифа гантели, кг</span><input class="in" id="gdh" data-f="gDbH" inputmode="decimal" value="${fmt(g.db.handle)}"></label><div class="mini-row" style="font-size:12px;color:var(--muted)"><span></span><span>вес, кг</span><span>штук</span><span></span></div>${plRows(g.db.plates,'dbplates')}<button class="btn sm outline" data-a="gAddPl" data-l="dbplates">${IC.plus} Блин</button><p class="muted" style="font-size:14px">Две гантели: ${rangeTxt(dl)}</p>`;
   else b+=`<label class="field"><span>Веса гантелей в зале, кг (через запятую с пробелом)</span><textarea class="in" id="gdf" data-f="gDbF">${esc(g.db.fixed)}</textarea></label><p class="muted" style="font-size:14px">Распознано: ${parseList(g.db.fixed).length} весов, ${rangeTxt(parseList(g.db.fixed))}</p>`;
-  b+=`</section>${g.id!==S.gymId?`<button class="btn wide" data-a="gSetCur">Сделать текущим залом</button>`:''}${S.gyms.length>1?`<button class="btn ghost danger" data-a="gDelete">Удалить зал</button>`:''}`;
+  b+=`</section><section class="card"><div class="lbl">Тренажёры</div>${(g.machines||[]).map((m,i)=>machineCard(g,m,i)).join('')||'<p class="muted">Тренажёров пока нет.</p>'}
+  <div class="btns"><button class="btn sm outline" data-a="gAddM" data-k="stack">${IC.plus} С плитками</button><button class="btn sm outline" data-a="gAddM" data-k="plate">${IC.plus} Под блины</button></div>
+  <p class="muted" style="font-size:13px">С плитками — блочные тренажёры и кроссоверы. Под блины — Смит, жим ногами, рычажные тренажёры: на них надеваются блины для штанги этого зала. Название связывает тренажёр с упражнением.</p></section>
+  <section class="card"><div class="lbl">Гири</div><label class="field"><span>Веса гирь, кг (через запятую с пробелом)</span><input class="in" id="gkb" data-f="gKb" value="${esc(g.kb||'')}" placeholder="например: 8, 12, 16, 24"></label></section>`;
+  b+=`${g.id!==S.gymId?`<button class="btn wide" data-a="gSetCur">Сделать текущим залом</button>`:''}${S.gyms.length>1?`<button class="btn ghost danger" data-a="gDelete">Удалить зал</button>`:''}`;
   return {head:hdr(g.name||'Зал',{back:true}),body:b};
 }
+function machineCard(g,m,i){
+  const f=(k,l,v,mode)=>`<label class="field"><span>${l}</span><input class="in" id="gm${k}${i}" data-f="gM" data-i="${i}" data-k="${k}" inputmode="${mode||'decimal'}" value="${v}"></label>`;
+  const list=options({id:'_m'+m.id,equip:'machine',machine:m.name},g);
+  return `<div class="card" style="background:var(--surface2);box-shadow:none;gap:8px"><div class="row"><input class="in grow" id="gmn${i}" data-f="gM" data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="Название тренажёра"><button class="ib" data-a="gDelM" data-i="${i}" aria-label="Удалить тренажёр">${IC.x}</button></div>
+  <div class="seg"><button class="${m.type==='stack'?'on':''}" data-a="gMType" data-i="${i}" data-k="stack">С плитками</button><button class="${m.type==='plate'?'on':''}" data-a="gMType" data-i="${i}" data-k="plate">Под блины</button></div>
+  ${m.type==='stack'?`<div class="fgrid" style="grid-template-columns:repeat(3,minmax(0,1fr))">${f('min','От, кг',fmt(m.min))}${f('max','До, кг',fmt(m.max))}${f('step','Шаг, кг',fmt(m.step))}</div>`
+  :`${f('base','Собственный вес каретки или рычага, кг',fmt(m.base||0))}<div class="field"><span>Куда надеваются блины</span><div class="seg"><button class="${m.sides!==1?'on':''}" data-a="gMSides" data-i="${i}" data-k="2">С двух сторон</button><button class="${m.sides===1?'on':''}" data-a="gMSides" data-i="${i}" data-k="1">С одной стороны</button></div></div>`}
+  <p class="muted" style="font-size:13px">Веса: ${rangeTxt(list)}</p></div>`;
+}
+function calcEx(c,gym){ if(c.kind==='bar') return {id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name};
+  if(c.kind==='m'){ const m=(gym.machines||[])[c.m]||(gym.machines||[])[0]; return {id:'_cm',equip:'machine',machine:m?m.name:'',step:5}; }
+  return {id:'_c',equip:'dumbbell',two:c.two}; }
 function viewCalc(){ const c=UI.calc; const gym=gymOf(c.gymId||S.gymId);
-  const ex=c.kind==='bar'?{id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name}:{id:'_c',equip:'dumbbell',two:c.two};
+  if(c.kind==='m'&&!(gym.machines||[]).some(m=>m.type==='plate')) c.kind='bar';
+  const ex=calcEx(c,gym);
   let b=`<label class="field"><span>Зал</span><select class="in" id="cGym" data-f="cGym">${S.gyms.map(g=>`<option value="${g.id}" ${g.id===gym.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>
-  <div class="seg"><button class="${c.kind==='bar'?'on':''}" data-a="cKind" data-k="bar">Штанга</button><button class="${c.kind==='db'?'on':''}" data-a="cKind" data-k="db">Гантели</button></div>`;
-  if(c.kind==='bar') b+=`<label class="field"><span>Гриф</span><select class="in" id="cBar" data-f="cBar">${gym.bars.map((x,i)=>`<option value="${i}" ${i===c.bar?'selected':''}>${esc(x.name)} · ${fmt(x.w)} кг</option>`).join('')}</select></label>`;
+  <div class="seg"><button class="${c.kind==='bar'?'on':''}" data-a="cKind" data-k="bar">Штанга</button><button class="${c.kind==='db'?'on':''}" data-a="cKind" data-k="db">Гантели</button>${(gym.machines||[]).some(m=>m.type==='plate')?`<button class="${c.kind==='m'?'on':''}" data-a="cKind" data-k="m">Тренажёр</button>`:''}</div>`;
+  if(c.kind==='m') b+=`<label class="field"><span>Тренажёр</span><select class="in" id="cM" data-f="cM">${(gym.machines||[]).map((m,i)=>m.type==='plate'?`<option value="${i}" ${i===c.m?'selected':''}>${esc(m.name)}</option>`:'').join('')}</select></label>`;
+  if(c.kind==='m'){} else if(c.kind==='bar') b+=`<label class="field"><span>Гриф</span><select class="in" id="cBar" data-f="cBar">${gym.bars.map((x,i)=>`<option value="${i}" ${i===c.bar?'selected':''}>${esc(x.name)} · ${fmt(x.w)} кг</option>`).join('')}</select></label>`;
   else if(gym.db.mode==='plates') b+=`<label class="check"><input type="checkbox" id="cTwo" data-f="cTwo" ${c.two?'checked':''}> Собираю две гантели</label>`;
-  b+=`<section class="card"><div class="lbl">${c.kind==='bar'?'Вес штанги':'Вес одной гантели'}, кг</div><div class="stp" style="height:58px;grid-template-columns:58px 1fr 58px"><button data-a="cStep" data-d="-1" aria-label="Меньше">−</button><input id="cW" data-f="cW" inputmode="decimal" value="${fmt(c.w)}" style="font-size:30px" aria-label="Вес"><button data-a="cStep" data-d="1" aria-label="Больше">+</button></div>
+  b+=`<section class="card"><div class="lbl">${c.kind==='bar'?'Вес штанги':c.kind==='m'?'Вес на тренажёре':'Вес одной гантели'}, кг</div><div class="stp" style="height:58px;grid-template-columns:58px 1fr 58px"><button data-a="cStep" data-d="-1" aria-label="Меньше">−</button><input id="cW" data-f="cW" inputmode="decimal" value="${fmt(c.w)}" style="font-size:30px" aria-label="Вес"><button data-a="cStep" data-d="1" aria-label="Больше">+</button></div>
   ${plateDetail(ex,gym,c.w)}${!breakdown(ex,gym,c.w).ok?(()=>{const bd=breakdown(ex,gym,c.w);return `<div class="btns"><button class="btn" data-a="cSet" data-w="${bd.lo}">${fmt(bd.lo)} кг</button><button class="btn" data-a="cSet" data-w="${bd.hi}">${fmt(bd.hi)} кг</button></div>`;})():''}</section>`;
   return {head:hdr('Калькулятор блинов',{back:UI.stack.length>0}),body:b};
 }
@@ -886,10 +928,14 @@ const A={
   gAddPl:el=>{ const g=S.gyms.find(x=>x.id===UI.id); (el.dataset.l==='plates'?g.plates:g.db.plates).push({w:5,n:2}); saveState(); render(); },
   gDelPl:el=>{ const g=S.gyms.find(x=>x.id===UI.id); (el.dataset.l==='plates'?g.plates:g.db.plates).splice(+el.dataset.i,1); saveState(); render(); },
   gDbMode:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.db.mode=el.dataset.k; saveState(); render(); },
+  gAddM:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.machines=g.machines||[]; g.machines.push(el.dataset.k==='stack'?{id:'m'+uid(),name:'Новый тренажёр',type:'stack',step:5,min:5,max:100}:{id:'m'+uid(),name:'Новый тренажёр',type:'plate',base:0,sides:2}); saveState(); render(); },
+  gDelM:el=>{ const g=S.gyms.find(x=>x.id===UI.id); const i=+el.dataset.i; confirmSheet('Удалить тренажёр?',`«${esc(g.machines[i].name)}» будет удалён из зала.`,'Удалить',()=>{ g.machines.splice(i,1); saveState(); render(); },true); },
+  gMType:el=>{ const g=S.gyms.find(x=>x.id===UI.id), m=g.machines[+el.dataset.i]; m.type=el.dataset.k; if(m.type==='stack'){ m.step=m.step||5; m.min=m.min||m.step; m.max=m.max||100; } else { m.base=m.base||0; m.sides=m.sides||2; } saveState(); render(); },
+  gMSides:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.machines[+el.dataset.i].sides=+el.dataset.k; saveState(); render(); },
   gSetCur:()=>{ S.gymId=UI.id; saveState(); toast('Текущий зал изменён'); render(); },
   gDelete:()=>confirmSheet('Удалить зал?','Инвентарь этого зала будет удалён.','Удалить',()=>{ S.gyms=S.gyms.filter(x=>x.id!==UI.id); if(S.gymId===UI.id) S.gymId=S.gyms[0].id; saveState(); back(); },true),
-  cKind:el=>{ UI.calc.kind=el.dataset.k; UI.calc.w=el.dataset.k==='bar'?Math.max(UI.calc.w,20):Math.min(UI.calc.w,30); render(); },
-  cStep:el=>{ const c=UI.calc, gym=gymOf(c.gymId||S.gymId); const ex=c.kind==='bar'?{id:'_c',equip:'barbell',bar:(gym.bars[c.bar]||gym.bars[0]||{}).name}:{id:'_c',equip:'dumbbell',two:c.two}; const list=options(ex,gym); c.w=+el.dataset.d>0?upW(list,c.w):downW(list,c.w); render(); },
+  cKind:el=>{ UI.calc.kind=el.dataset.k; if(el.dataset.k==='m'){ const g=gymOf(UI.calc.gymId||S.gymId); UI.calc.m=Math.max(0,(g.machines||[]).findIndex(m=>m.type==='plate')); } UI.calc.w=el.dataset.k==='bar'?Math.max(UI.calc.w,20):Math.min(UI.calc.w,30); render(); },
+  cStep:el=>{ const c=UI.calc, gym=gymOf(c.gymId||S.gymId); const ex=calcEx(c,gym); const list=options(ex,gym); c.w=+el.dataset.d>0?upW(list,c.w):downW(list,c.w); render(); },
   cSet:el=>{ UI.calc.w=+el.dataset.w; render(); },
   setOpt:el=>{ S.settings[el.dataset.k]=el.dataset.v; if(el.dataset.k==='theme') applyTheme(); saveState(); render(); if(el.dataset.k==='signal'){ audio(); signal('end'); } },
   setNum:el=>{ const k=el.dataset.k, st=S.settings; st[k]=Math.min(+el.dataset.max,Math.max(+el.dataset.min,(+st[k]||0)+(+el.dataset.d))); if(st.repMax<=st.repMin) st.repMax=st.repMin+1; saveState(); render(); },
@@ -906,13 +952,19 @@ const F={
   r:el=>{ const c=ctx(el); const v=num(el.value); c.s.r=v==null?0:Math.max(0,Math.round(v)); saveActive(); render(); },
   actNote:el=>{ ACT.note=el.value; saveActive(); },
   sessNote:el=>{ const s=SESS.find(x=>x.id===UI.id); if(s){ s.note=el.value; saveSession(s); toast('Заметка сохранена'); } },
-  dx:el=>{ const d=UI.draft, k=el.dataset.k; let v=el.value; if(k==='step'||k==='start'){ v=num(v); } if(k==='rest'){ v=num(v); v=v?Math.round(v):null; } if(k==='step'&&!(v>0)) v=5; d[k]=v; if(k==='equip'){ if(v==='barbell'&&!d.bar) d.bar='Олимпийский'; d.warm=v!=='bodyweight'; render(); } },
+  dx:el=>{ const d=UI.draft, k=el.dataset.k; let v=el.value; if(k==='step'||k==='start'){ v=num(v); } if(k==='rest'){ v=num(v); v=v?Math.round(v):null; } if(k==='step'&&!(v>0)) v=5; d[k]=v; if(k==='equip'){ if(v==='barbell'&&!d.bar) d.bar='Олимпийский'; d.warm=v!=='bodyweight'; render(); } if(k==='machine') render(); },
   dxc:el=>{ UI.draft[el.dataset.k]=el.checked; },
   tplName:el=>{ const t=S.templates.find(x=>x.id===UI.id); t.name=el.value.trim()||t.name; saveState(); },
   gName:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.name=el.value.trim()||g.name; saveState(); render(); },
   gBar:el=>{ const g=S.gyms.find(x=>x.id===UI.id), b=g.bars[+el.dataset.i]; if(el.dataset.k==='w'){ const v=num(el.value); if(v!=null&&v>=0) b.w=v; } else b.name=el.value.trim(); saveState(); render(); },
   gPl:el=>{ const g=S.gyms.find(x=>x.id===UI.id), arr=el.dataset.l==='plates'?g.plates:g.db.plates, p=arr[+el.dataset.i]; const v=num(el.value); if(v!=null&&v>=0) p[el.dataset.k]=el.dataset.k==='n'?Math.round(v):v; saveState(); render(); },
   gDbH:el=>{ const g=S.gyms.find(x=>x.id===UI.id); const v=num(el.value); if(v!=null&&v>=0) g.db.handle=v; saveState(); render(); },
+  gM:el=>{ const g=S.gyms.find(x=>x.id===UI.id), m=g.machines[+el.dataset.i], k=el.dataset.k;
+    if(k==='name'){ const old=m.name, nv=el.value.trim(); if(!nv) return; m.name=nv; if(old&&old!==nv&&!S.gyms.some(x=>(x.machines||[]).some(y=>y!==m&&y.name===old))) S.exercises.forEach(e=>{ if(e.machine===old) e.machine=nv; }); }
+    else { const v=num(el.value); if(v==null||v<0) return; if(k==='step'&&v<=0) return; m[k]=v; }
+    saveState(); render(); },
+  gKb:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.kb=el.value; saveState(); render(); },
+  cM:el=>{ UI.calc.m=+el.value; render(); },
   gDbF:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.db.fixed=el.value; saveState(); render(); },
   cGym:el=>{ UI.calc.gymId=el.value; UI.calc.bar=0; render(); },
   cBar:el=>{ UI.calc.bar=+el.value; render(); },
