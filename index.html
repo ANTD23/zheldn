@@ -125,6 +125,15 @@ select.in{appearance:auto}
 .wl{border:0;background:var(--surface2);border-radius:10px;padding:2px 8px;font-size:13px;min-height:26px;color:var(--muted)}
 .wl.on{background:var(--good-soft);color:var(--good)}
 .wl.off{background:var(--bad-soft);color:var(--bad)}
+.clocks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.clk{background:var(--surface);border-radius:18px;padding:10px 12px;display:flex;flex-direction:column;box-shadow:var(--shadow);min-width:0}
+.clk span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clk b{font:700 46px/1.05 var(--f-num)}
+.clk.run{outline:2px solid var(--accent);outline-offset:-2px}
+.clk.end{background:var(--accent);color:var(--accent-ink)}.clk.end span{color:var(--accent-ink)}
+.tmctl{display:flex;gap:6px}
+.tmctl button{flex:1;min-height:48px;border:0;border-radius:12px;background:var(--surface2);font:600 17px var(--f-num);color:var(--fg)}
+.tmctl .go{flex:2;background:var(--fg);color:var(--bg);font-family:var(--f-body);font-size:15px}
 .cbig{border-radius:24px;padding:18px 16px 16px;text-align:center;background:var(--surface2);color:var(--fg);display:flex;flex-direction:column;gap:2px;transition:background .3s}
 .cbig.hi{background:var(--p-red);color:#fff}.cbig.lo{background:var(--p-blue);color:#fff}.cbig.mid{background:var(--accent);color:var(--accent-ink)}
 .cbpm{font:700 128px/1 var(--f-num);letter-spacing:-.02em}
@@ -308,7 +317,7 @@ const plural=(n,a,b,c)=>{const m10=n%10,m100=n%100; return m10===1&&m100!==11?a:
 const GROUPS=['Грудь','Спина','Ноги','Ягодицы','Плечи','Бицепс','Трицепс','Предплечья','Икры','Пресс'];
 const EQUIP={barbell:'Штанга',dumbbell:'Гантели',machine:'Тренажёр',kettlebell:'Гиря',bodyweight:'Свой вес'};
 const MTYPE={stack:'С плитками',plate:'Под блины'};
-const DEF_SETTINGS={theme:'auto',signal:'both',pre:10,restWarm:0,restAfterWarm:180,restWork:180,restNext:180,backupDays:7,hrMax:null,hrRest:0,cardio:{name:'Аэробайк',hi:150,lo:110,sigHi:true,sigLo:true,vib:true,sprint:10,count:true},workSets:2,repMin:6,repMax:10,warm:[{p:50,r:10},{p:80,r:5}],bw:null};
+const DEF_SETTINGS={theme:'auto',signal:'both',pre:10,restWarm:0,restAfterWarm:180,restWork:180,restNext:180,backupDays:7,hrMax:null,hrRest:0,cardio:{name:'Аэробайк',hi:150,lo:110,sigHi:true,sigLo:true,vib:true,sprint:10,count:true,warm:300,timer:300},workSets:2,repMin:6,repMax:10,warm:[{p:50,r:10},{p:80,r:5}],bw:null};
 const SEED=[
 ['squat','Приседания со штангой','Ноги','barbell'],['front','Фронтальные приседания','Ноги','barbell'],['deadlift','Становая тяга','Спина','barbell'],
 ['rdl','Румынская тяга','Ноги','barbell'],['bench','Жим штанги лёжа','Грудь','barbell'],['incline','Жим штанги на наклонной скамье','Грудь','barbell'],
@@ -437,7 +446,7 @@ let IDB=null, saveT=null, persisted=null;
 function idbOpen(){ return new Promise(res=>{ try{ const r=indexedDB.open('ironlog',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); r.onblocked=()=>res(null); }catch(e){ res(null); } }); }
 function idbGet(k){ return new Promise(res=>{ try{ const q=IDB.transaction('kv').objectStore('kv').get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(undefined); }catch(e){ res(undefined); } }); }
 function flush(){ clearTimeout(saveT); saveT=null;
-  if(IDB){ try{ const tx=IDB.transaction('kv','readwrite'), st=tx.objectStore('kv'); st.put(clone(S),'S'); st.put(clone(SESS),'SESS'); st.put(ACT?clone(ACT):null,'ACT'); st.put(CAR.rec?clone(CAR.rec):null,'CARDIO'); tx.onerror=()=>lsSet(); return; }catch(e){} }
+  if(IDB){ try{ const tx=IDB.transaction('kv','readwrite'), st=tx.objectStore('kv'); st.put(clone(S),'S'); st.put(clone(SESS),'SESS'); st.put(ACT?clone(ACT):null,'ACT'); st.put(clone({rec:CAR.rec||null,tm:CAR.tm||null}),'CARDIO'); tx.onerror=()=>lsSet(); return; }catch(e){} }
   lsSet(); }
 function persist(){ if(!saveT) saveT=setTimeout(flush,250); }
 function saveState(){ S._u=Date.now(); OV++; OC.clear(); persist(); }
@@ -504,16 +513,18 @@ function hrSummary(h){ if(!h||!h.s||h.s.length<2) return null; const v=h.s.map(x
   return {avg:Math.round(v.reduce((a,b)=>a+b,0)/v.length),max:Math.max(...v),min:Math.min(...v),z,hrMax:S.settings.hrMax||null,s:ds}; }
 
 /* ---------- cardio: heart-rate thresholds (aerobike sprints) ---------- */
-const CAR={armUp:true,armDown:false,state:null,lowAt:null,hiAt:null,sp:null,spT:null,rec:null};
+const CAR={tm:null,armUp:true,armDown:false,state:null,lowAt:null,hiAt:null,sp:null,spT:null,rec:null};
 const cs=()=>S.settings.cardio;
 function cSig(kind){ const c=cs();
   if(kind==='hi'){ beep(1760,.22,0); beep(1760,.22,.3); beep(1760,.4,.6); if(c.vib) vib([300,120,300,120,300]); }
   else if(kind==='lo'){ beep(660,.35,0); beep(520,.5,.45); if(c.vib) vib([600,200,600]); }
   else if(kind==='tick') beep(1000,.12,0);
+  else if(kind==='tmEnd'){ beep(1320,.25,0); beep(1320,.25,.35); beep(1760,.7,.7); if(c.vib) vib([500,200,500,200,800]); }
   else if(kind==='go'){ beep(1500,.6,0); if(c.vib) vib(400); }
   else if(kind==='stop'){ beep(880,.25,0); beep(880,.25,.3); beep(660,.5,.6); if(c.vib) vib([400,150,400]); } }
 function cardioHr(b){ if(UI.view!=='cardio'&&!CAR.rec) return; const c=cs(), now=Date.now(); const prev=CAR.state;
   CAR.state=b>=c.hi?'hi':b<=c.lo?'lo':'mid';
+  if(warmOn()){ if(CAR.rec){ const t=Math.round((now-CAR.rec.start)/1000), ls=CAR.rec.s[CAR.rec.s.length-1]; if(!ls||t-ls[0]>=2){ CAR.rec.s.push([t,b]); persist(); } } if(prev!==CAR.state&&UI.view==='cardio') updCardio(); return; }
   if(b>=c.hi&&CAR.armUp){ CAR.armUp=false; CAR.armDown=true; CAR.hiAt=now; if(c.sigHi) cSig('hi');
     if(CAR.rec) CAR.rec.sp.push({t:Math.round((now-CAR.rec.start)/1000),peak:b,rec:null}); }
   if(b<=c.lo&&CAR.armDown){ CAR.armDown=false; CAR.armUp=true; CAR.lowAt=now; if(c.sigLo) cSig('lo');
@@ -521,6 +532,20 @@ function cardioHr(b){ if(UI.view!=='cardio'&&!CAR.rec) return; const c=cs(), now
   if(CAR.rec){ const l=CAR.rec.sp[CAR.rec.sp.length-1]; if(l&&l.rec==null&&b>l.peak) l.peak=b;
     const t=Math.round((now-CAR.rec.start)/1000), ls=CAR.rec.s[CAR.rec.s.length-1]; if(!ls||t-ls[0]>=2){ CAR.rec.s.push([t,b]); persist(); } }
   if(prev!==CAR.state&&UI.view==='cardio') updCardio(); }
+const warmOn=()=>!!(CAR.tm&&CAR.tm.warm&&!CAR.tm.done);
+function tmStart(sec,label,warm){ CAR.tm={end:Date.now()+sec*1000,total:sec,label,warm:!!warm,paused:null,pre:false,done:false}; persist(); }
+const tmLeft=()=>{ const t=CAR.tm; if(!t) return 0; return t.paused!=null?t.paused:Math.max(0,t.end-Date.now()); };
+function tmTick(){ const t=CAR.tm; if(!t||t.paused!=null||t.done) return; const r=t.end-Date.now();
+  if(!t.pre&&r<=10000&&r>0&&t.total>15){ t.pre=true; cSig('tick'); }
+  if(r<=0){ t.done=true; cSig('tmEnd'); if(t.warm){ cardioReset(); toast('Разминка окончена — можно рывок'); } persist(); if(UI.view==='cardio') render(); } }
+function clocksHtml(){ const c=cs(), t=CAR.tm, run=t&&!t.done;
+  const lbl=t?(t.done?(t.warm?'Разминка окончена':'Время вышло'):t.label+(t.paused!=null?' · пауза':'')):'Таймер';
+  const val=run?tmLeft():t&&t.done?0:c.timer*1000;
+  return `<div class="clocks"><div class="clk"><span>Общее время</span><b class="num" id="cTot">${CAR.rec?fmtDur(Date.now()-CAR.rec.start):'—'}</b></div>
+  <div class="clk ${run&&t.paused==null?'run':''} ${t&&t.done?'end':''}"><span>${esc(lbl)}</span><b class="num" id="cTm">${fmtSec(Math.ceil(val/1000))}</b></div></div>
+  <div class="tmctl">${!run?`<button data-a="ctAdj" data-d="-30" aria-label="Минус 30 секунд">−30</button><button class="go" data-a="ctStart">Старт ${fmtSec(c.timer)}</button><button data-a="ctAdj" data-d="30" aria-label="Плюс 30 секунд">+30</button>`
+    :`<button data-a="ctAdd" data-d="-30" aria-label="Минус 30 секунд">−30</button><button class="go" data-a="${t.paused!=null?'ctResume':'ctPause'}">${t.paused!=null?'Продолжить':'Пауза'}</button><button data-a="ctAdd" data-d="30" aria-label="Плюс 30 секунд">+30</button><button data-a="ctReset" aria-label="Сбросить таймер">Сброс</button>`}</div>`; }
+function updClocks(){ const a=$('#cTot'); if(a&&CAR.rec) a.textContent=fmtDur(Date.now()-CAR.rec.start); const b=$('#cTm'); if(b&&CAR.tm&&!CAR.tm.done) b.textContent=fmtSec(Math.ceil(tmLeft()/1000)); }
 function cardioReset(){ CAR.armUp=true; CAR.armDown=false; CAR.lowAt=null; CAR.hiAt=null; }
 function sprintStart(){ const c=cs(); audio(); if(CAR.spT) clearInterval(CAR.spT); const t0=Date.now()+3000; CAR.sp={go:t0,end:t0+c.sprint*1000,last:null};
   const step=()=>{ const now=Date.now(), sp=CAR.sp; if(!sp) return;
@@ -539,26 +564,27 @@ function sprintHtml(){ const sp=CAR.sp, c=cs(), now=Date.now();
   return `<button class="btn big wide sprint" data-a="spStop">Стоп! Восстановление</button>`; }
 function updSprint(){ const el=$('#spBox'); if(el) el.innerHTML=sprintHtml(); }
 function cardioPanel(){ const c=cs(), b=hrFresh()?HR.bpm:null, st=b==null?'none':b>=c.hi?'hi':b<=c.lo?'lo':'mid';
-  const lbl={none:HR.state==='on'?'Ждём сигнал датчика':'Датчик не подключён',hi:'Цель достигнута',mid:CAR.armDown?'Пульс снижается — восстановление':'Работа: до цели '+(b!=null?c.hi-b:'')+' уд/мин',lo:'Восстановились — можно рывок'}[st];
+  const lbl=warmOn()&&b!=null?'Разминка · сигналы границ выключены':{none:HR.state==='on'?'Ждём сигнал датчика':'Датчик не подключён',hi:'Цель достигнута',mid:CAR.armDown?'Пульс снижается — восстановление':'Работа: до цели '+(b!=null?c.hi-b:'')+' уд/мин',lo:'Восстановились — можно рывок'}[st]; const stc=warmOn()&&b!=null?'mid':st;
   const since=st==='lo'&&CAR.lowAt?'отдыхаете '+fmtSec((Date.now()-CAR.lowAt)/1000):CAR.armDown&&CAR.hiAt?'с пика '+fmtSec((Date.now()-CAR.hiAt)/1000):'';
-  return `<div class="cbig ${st}"><div class="cbpm num">${b??'—'}</div><div class="clbl">${lbl}</div><div class="csub num">${since}${CAR.rec?` · рывков: ${CAR.rec.sp.length}`:''}</div></div>`; }
+  return `<div class="cbig ${stc}"><div class="cbpm num">${b??'—'}</div><div class="clbl">${lbl}</div><div class="csub num">${since}${CAR.rec?` · рывков: ${CAR.rec.sp.length}`:''}</div></div>`; }
 function updCardio(){ const el=$('#cPanel'); if(el) el.innerHTML=cardioPanel(); const e2=$('#cElapsed'); if(e2&&CAR.rec) e2.textContent=fmtDur(Date.now()-CAR.rec.start); }
-setInterval(()=>{ if(UI.view==='cardio') updCardio(); },1000);
+setInterval(()=>{ tmTick(); if(UI.view==='cardio'){ updClocks(); updCardio(); } },500);
 function viewCardio(){ const c=cs();
   const thr=(k,lbl,sig,hint)=>`<div class="stack" style="gap:6px"><div class="row"><div class="grow"><div class="t" style="font-weight:600">${lbl}</div><div class="muted" style="font-size:13px">${hint}</div></div>
     <button class="bell ${c[sig]?'on':''}" data-a="cTog" data-k="${sig}" aria-pressed="${c[sig]}" aria-label="Сигнал ${c[sig]?'включён':'выключен'}">${c[sig]?'Сигнал вкл':'Сигнал выкл'}</button></div>
     <div class="stp" style="height:52px;grid-template-columns:52px 1fr 52px"><button data-a="cThr" data-k="${k}" data-d="-5" aria-label="Минус 5">−5</button><input id="cThr_${k}" data-f="cThrIn" data-k="${k}" inputmode="numeric" value="${c[k]}" aria-label="${lbl}"><button data-a="cThr" data-k="${k}" data-d="5" aria-label="Плюс 5">+5</button></div></div>`;
   const pts=CAR.rec&&CAR.rec.s.length>1?CAR.rec.s.slice(-300).map(x=>({x:fmtSec(x[0]),y:x[1]})):null;
-  let b=`<div id="cPanel">${cardioPanel()}</div>
+  let b=`<div id="cClocks">${clocksHtml()}</div><div id="cPanel">${cardioPanel()}</div>
   ${HR.state==='on'?'':`<button class="btn primary wide" data-a="hrConnect">♥ Подключить Polar H9</button>`}
   <div id="spBox">${sprintHtml()}</div>
   <section class="card">${thr('hi','Верхняя граница — цель','sigHi','Сигнал, когда пульс поднялся до этого значения')}${thr('lo','Нижняя граница — восстановление','sigLo','Сигнал, когда пульс опустился до этого значения')}
   <div class="row wrap"><label class="check grow"><input type="checkbox" id="cVib" data-f="cVib" ${c.vib?'checked':''}> Вибрация вместе со звуком</label></div>
+  <div class="row"><div class="grow">Разминка в начале тренировки</div><div class="stp" style="width:150px;height:44px"><button data-a="cWarm" data-d="-30" aria-label="Меньше">−</button><input readonly value="${c.warm?fmtSec(c.warm):'нет'}" style="font-size:19px" aria-label="Разминка"><button data-a="cWarm" data-d="30" aria-label="Больше">+</button></div></div>
   <div class="row"><div class="grow">Длительность рывка</div><div class="stp" style="width:150px;height:44px"><button data-a="cSpr" data-d="-5" aria-label="Меньше">−</button><input readonly value="${c.sprint} с" style="font-size:19px" aria-label="Длительность рывка"><button data-a="cSpr" data-d="5" aria-label="Больше">+</button></div></div>
   <button class="btn sm outline" data-a="cTest">Проверить сигналы</button></section>
   ${pts?`<section class="card"><div class="lbl">Пульс за запись</div>${lineChart(pts,'')}</section>`:''}
-  ${CAR.rec?`<button class="btn primary wide big" data-a="cStop">Завершить и сохранить</button><button class="btn ghost danger" data-a="cCancel">Отменить запись</button>`:`<button class="btn wide" data-a="cRec">Начать запись в историю</button><p class="muted" style="font-size:13px">Сигналы работают и без записи. Запись сохранит в историю пульс, число рывков и время восстановления после каждого.</p>`}`;
-  return {head:hdr(c.name,{back:true,sub:CAR.rec?`<span>запись</span><span id="cElapsed" class="num">${fmtDur(Date.now()-CAR.rec.start)}</span>`:'монитор пульса'}),body:b};
+  ${CAR.rec?`<button class="btn primary wide big" data-a="cStop">Завершить и сохранить</button><button class="btn ghost danger" data-a="cCancel">Отменить тренировку</button>`:`<button class="btn primary wide big" data-a="cRec">Начать тренировку</button><p class="muted" style="font-size:13px">Запустится общее время${cs().warm?' и разминка '+fmtSec(cs().warm)+' — пока она идёт, сигналы границ молчат':''}. В историю сохранятся пульс, рывки и время восстановления. Сигналы границ работают и без старта тренировки.</p>`}`;
+  return {head:hdr(c.name,{back:true,sub:CAR.rec?'тренировка идёт':'монитор пульса'}),body:b};
 }
 
 /* ---------- rest timer ---------- */
@@ -1127,11 +1153,18 @@ const A={
   cThr:el=>{ const c=cs(), k=el.dataset.k; c[k]=Math.max(40,Math.min(230,(+c[k]||0)+(+el.dataset.d))); if(c.lo>=c.hi){ if(k==='hi') c.lo=c.hi-5; else c.hi=c.lo+5; } cardioReset(); saveState(); render(); },
   cSpr:el=>{ const c=cs(); c.sprint=Math.max(5,Math.min(120,c.sprint+(+el.dataset.d))); saveState(); render(); },
   cTest:()=>{ audio(); cSig('hi'); setTimeout(()=>cSig('lo'),1500); toast('Сначала сигнал цели, затем сигнал восстановления'); },
-  cRec:()=>{ audio(); CAR.rec={id:uid(),start:Date.now(),s:[],sp:[]}; cardioReset(); wakeOn(); flush(); render(); },
+  cRec:()=>{ audio(); CAR.rec={id:uid(),start:Date.now(),s:[],sp:[]}; cardioReset(); if(cs().warm) tmStart(cs().warm,'Разминка',true); else CAR.tm=null; wakeOn(); flush(); render(); window.scrollTo(0,0); },
+  ctStart:()=>{ audio(); tmStart(cs().timer,'Таймер',false); render(); },
+  ctAdj:el=>{ const c=cs(); c.timer=Math.max(30,Math.min(3600,c.timer+(+el.dataset.d))); saveState(); render(); },
+  ctAdd:el=>{ const t=CAR.tm; if(!t) return; const d=+el.dataset.d*1000; if(t.paused!=null) t.paused=Math.max(1000,t.paused+d); else { t.end=Math.max(Date.now()+1000,t.end+d); if(t.end-Date.now()>10000) t.pre=false; } t.total=Math.max(1,t.total+d/1000); persist(); render(); },
+  ctPause:()=>{ const t=CAR.tm; if(!t) return; t.paused=tmLeft(); persist(); render(); },
+  ctResume:()=>{ const t=CAR.tm; if(!t) return; t.end=Date.now()+t.paused; t.paused=null; persist(); render(); },
+  ctReset:()=>{ const w=CAR.tm&&CAR.tm.warm; CAR.tm=null; if(w) cardioReset(); persist(); render(); },
+  cWarm:el=>{ const c=cs(); c.warm=Math.max(0,Math.min(1800,c.warm+(+el.dataset.d))); saveState(); render(); },
   cStop:()=>{ const r=CAR.rec; if(!r) return; const h=hrSummary({s:r.s});
     const s={id:r.id,kind:'cardio',start:r.start,end:Date.now(),gymId:S.gymId,gymName:gymOf(S.gymId).name,tplId:null,name:cs().name,note:'',entries:[],prs:[],hr:h||undefined,sprints:r.sp,thr:{hi:cs().hi,lo:cs().lo}};
-    SESS.push(s); saveSession(s); CAR.rec=null; flush(); if(!ACT) wakeOff(); UI.tab='hist'; UI.view='session'; UI.id=s.id; UI.stack=[]; UI.fresh=s.id; render(); window.scrollTo(0,0); },
-  cCancel:()=>confirmSheet('Отменить запись?','Записанный пульс не сохранится.','Отменить запись',()=>{ CAR.rec=null; flush(); render(); },true),
+    SESS.push(s); saveSession(s); CAR.rec=null; CAR.tm=null; flush(); if(!ACT) wakeOff(); UI.tab='hist'; UI.view='session'; UI.id=s.id; UI.stack=[]; UI.fresh=s.id; render(); window.scrollTo(0,0); },
+  cCancel:()=>confirmSheet('Отменить тренировку?','Время и пульс этой тренировки не сохранятся.','Отменить тренировку',()=>{ CAR.rec=null; CAR.tm=null; flush(); render(); },true),
   cSet:el=>{ UI.calc.w=+el.dataset.w; render(); },
   setOpt:el=>{ S.settings[el.dataset.k]=el.dataset.v; if(el.dataset.k==='theme') applyTheme(); saveState(); render(); if(el.dataset.k==='signal'){ audio(); signal('end'); } },
   setNum:el=>{ const k=el.dataset.k, st=S.settings; st[k]=Math.min(+el.dataset.max,Math.max(+el.dataset.min,(+st[k]||0)+(+el.dataset.d))); if(st.repMax<=st.repMin) st.repMax=st.repMin+1; saveState(); render(); },
@@ -1213,7 +1246,7 @@ $('#importFile').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.
 (async function boot(){
   IDB=await idbOpen();
   let loaded=false;
-  if(IDB){ const st=await idbGet('S'); if(st){ S=migrate(st); SESS=(await idbGet('SESS'))||[]; ACT=(await idbGet('ACT'))||null; CAR.rec=(await idbGet('CARDIO'))||null; loaded=true; } }
+  if(IDB){ const st=await idbGet('S'); if(st){ S=migrate(st); SESS=(await idbGet('SESS'))||[]; ACT=(await idbGet('ACT'))||null; { const cd=(await idbGet('CARDIO'))||null; if(cd&&cd.start){ CAR.rec=cd; } else if(cd){ CAR.rec=cd.rec||null; CAR.tm=cd.tm||null; } } loaded=true; } }
   if(!loaded){ const L=lsGet(); if(L&&L.S){ S=migrate(L.S); SESS=L.SESS||[]; ACT=L.ACT||null; } flush(); }
   applyTheme(); render(); setInterval(tick,250);
   if(ACT) wakeOn();
