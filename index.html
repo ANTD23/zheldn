@@ -134,6 +134,17 @@ select.in{appearance:auto}
 .tmctl{display:flex;gap:6px}
 .tmctl button{flex:1;min-height:48px;border:0;border-radius:12px;background:var(--surface2);font:600 17px var(--f-num);color:var(--fg)}
 .tmctl .go{flex:2;background:var(--fg);color:var(--bg);font-family:var(--f-body);font-size:15px}
+.mph{border-radius:24px;padding:14px 16px 16px;text-align:center;background:var(--surface2);color:var(--fg);display:flex;flex-direction:column;gap:2px}
+.mph.work{background:var(--p-red);color:#fff}.mph.ready,.mph.wait{background:var(--accent);color:var(--accent-ink)}.mph.rest{background:var(--p-blue);color:#fff}.mph.between{background:var(--p-green);color:#fff}.mph.done{background:var(--good-soft)}
+.mlbl{font:600 22px/1.2 var(--f-num)}.mhint{font-size:15px;opacity:.9}
+.mph.steady.in{background:var(--p-green);color:#fff}.mph.steady.hi{background:var(--p-red);color:#fff}.mph.steady.lo{background:var(--p-blue);color:#fff}
+.wgrid,.plg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.plg .field span,.wgrid .field span{font-size:12px}.mbig{font:700 112px/1 var(--f-num);letter-spacing:-.02em}.mprog{font-size:15px;opacity:.9}
+.mhr{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px}
+.mhr>div{background:var(--surface);border-radius:16px;padding:8px 12px;display:flex;flex-direction:column;box-shadow:var(--shadow);min-width:0}
+.mhr b{white-space:nowrap}.mhr>div:not(:first-child) b{font-size:28px}
+.mhr span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mhr b{font:700 34px/1.1 var(--f-num)}.mhr>div:first-child b{font-size:46px}
+.plrow{display:grid;grid-template-columns:34px repeat(3,minmax(0,1fr)) 44px 40px;gap:6px;align-items:center}
+.plh{font-size:12px;color:var(--muted)}.pin{text-align:center;padding:0 4px;min-height:44px}
 .cbig{border-radius:24px;padding:18px 16px 16px;text-align:center;background:var(--surface2);color:var(--fg);display:flex;flex-direction:column;gap:2px;transition:background .3s}
 .cbig.hi{background:var(--p-red);color:#fff}.cbig.lo{background:var(--p-blue);color:#fff}.cbig.mid{background:var(--accent);color:var(--accent-ink)}
 .cbpm{font:700 128px/1 var(--f-num);letter-spacing:-.02em}
@@ -349,9 +360,9 @@ function freshState(){
   const T=(id,name,ids)=>({id,name,items:ids.map(i=>({exId:'x_'+i}))});
   return {v:2,_u:0,settings:clone(DEF_SETTINGS),gyms:seedGyms(),gymId:'g_d23',exercises:seedExercises(),
     templates:[T('t_a','Тренировка А',['squat','bench','row','ohp_db']),T('t_b','Тренировка Б',['deadlift','ohp','pullup','curl_ez']),T('t_c','Тренировка В',['legpress','incline','latpull','pushdown'])],
-    nextTpl:'t_a',body:[],hint:true};
+    nextTpl:'t_a',body:[],hint:true,mito:defMito()};
 }
-function migrate(s){ s.settings=Object.assign(clone(DEF_SETTINGS),s.settings||{}); s.settings.cardio=Object.assign(clone(DEF_SETTINGS.cardio),s.settings.cardio||{}); s.gyms=s.gyms||[]; s.exercises=s.exercises||[]; s.templates=s.templates||[]; s.body=s.body||[];
+function migrate(s){ if(!s.mito||!Array.isArray(s.mito.profiles)||!s.mito.profiles.length) s.mito=defMito(); s.mito.profiles=s.mito.profiles.map(p=>{ if(p.v===2){ const d=defProfile('',p.age||40); for(const k in d) if(p[k]==null) p[k]=d[k]; return p; } return Object.assign(defProfile(p.name||'Профиль',p.age||40),{id:p.id,hrMax:p.hrMax||null}); }); if(!s.mito.profiles.some(p=>p.id===s.mito.active)) s.mito.active=s.mito.profiles[0].id; s.settings=Object.assign(clone(DEF_SETTINGS),s.settings||{}); s.settings.cardio=Object.assign(clone(DEF_SETTINGS.cardio),s.settings.cardio||{}); s.gyms=s.gyms||[]; s.exercises=s.exercises||[]; s.templates=s.templates||[]; s.body=s.body||[];
   s.gyms.forEach(g=>{ if(!Array.isArray(g.machines)) g.machines=g.id==='g_ddx'&&(s.v||1)<2?ddxMachines():[]; if(g.kb==null) g.kb=g.id==='g_ddx'?'8, 12, 16, 20, 24, 28, 32':''; g.machines.forEach(m=>{ if(!m.id) m.id='m'+uid(); }); });
   if((s.v||1)<2){ const seed=seedExercises(); seed.forEach(x=>{ const e=s.exercises.find(y=>y.id===x.id); if(e){ if(e.machine==null&&x.machine) e.machine=x.machine; } else if(['kettlebell'].includes(x.equip)||x.id==='x_smithsq') s.exercises.push(x); }); s.v=2; }
   s.exercises.forEach(e=>{ if(e.machine==null) e.machine=''; if(e.pre){ const ts=[s.templates.find(t=>t.id===s.nextTpl),...s.templates].filter(Boolean); const t=ts.find(t=>t.items.some(i=>i.exId===e.id)); if(t){ const it=t.items.find(i=>i.exId===e.id); if(!it.pre) it.pre=e.pre; } delete e.pre; } });
@@ -446,7 +457,7 @@ let IDB=null, saveT=null, persisted=null;
 function idbOpen(){ return new Promise(res=>{ try{ const r=indexedDB.open('ironlog',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); r.onblocked=()=>res(null); }catch(e){ res(null); } }); }
 function idbGet(k){ return new Promise(res=>{ try{ const q=IDB.transaction('kv').objectStore('kv').get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(undefined); }catch(e){ res(undefined); } }); }
 function flush(){ clearTimeout(saveT); saveT=null;
-  if(IDB){ try{ const tx=IDB.transaction('kv','readwrite'), st=tx.objectStore('kv'); st.put(clone(S),'S'); st.put(clone(SESS),'SESS'); st.put(ACT?clone(ACT):null,'ACT'); st.put(clone({rec:CAR.rec||null,tm:CAR.tm||null}),'CARDIO'); tx.onerror=()=>lsSet(); return; }catch(e){} }
+  if(IDB){ try{ const tx=IDB.transaction('kv','readwrite'), st=tx.objectStore('kv'); st.put(clone(S),'S'); st.put(clone(SESS),'SESS'); st.put(ACT?clone(ACT):null,'ACT'); st.put(clone({rec:CAR.rec||null,tm:CAR.tm||null}),'CARDIO'); st.put(MITO.run?clone(MITO.run):null,'MITO'); tx.onerror=()=>lsSet(); return; }catch(e){} }
   lsSet(); }
 function persist(){ if(!saveT) saveT=setTimeout(flush,250); }
 function saveState(){ S._u=Date.now(); OV++; OC.clear(); persist(); }
@@ -496,7 +507,7 @@ async function hrAuto(){ // reconnect a known sensor without the chooser, where 
   try{ if(HR.dev||!S.settings.hrId||!navigator.bluetooth||!navigator.bluetooth.getDevices) return; const ds=await navigator.bluetooth.getDevices(); const d=ds.find(x=>x.id===S.settings.hrId); if(!d) return; hrUse(d); HR.state='connecting'; updHR(); await hrAttach(); }catch(e){ if(HR.state==='connecting'){ HR.state='off'; HR.dev=null; updHR(); } } }
 function hrOff(){ HR.state='off'; try{ HR.dev&&HR.dev.gatt.connected&&HR.dev.gatt.disconnect(); }catch(e){} HR.dev=null; HR.bpm=null; updHR(); }
 function onHr(ev){ const v=ev.target.value; const f=v.getUint8(0); const b=(f&1)?v.getUint16(1,true):v.getUint8(1); if(!b) return;
-  HR.bpm=b; HR.last=Date.now(); cardioHr(b);
+  HR.bpm=b; HR.last=Date.now(); cardioHr(b); mitoHr(b);
   if(ACT){ const h=ACT.hr||(ACT.hr={s:[]}); const t=Math.round((Date.now()-ACT.start)/1000); const l=h.s[h.s.length-1]; if(!l||t-l[0]>=5){ h.s.push([t,b]); saveActive(); }
     const tm=ACT.timer, lim=S.settings.hrRest; void 0; if(tm&&!tm.fired&&lim&&!tm.hrSig&&b<=lim&&Date.now()-(tm.end-tm.total*1000)>20000){ tm.hrSig=true; signal('pre'); const lb=$('#tmLabel'); if(lb) lb.textContent='Пульс восстановился до '+b; } }
   updHR(); }
@@ -507,10 +518,10 @@ function hrChip(){ const st=HR.state, b=hrFresh()?HR.bpm:null, z=hrZone(b);
   return `<button class="hr" id="hrChip" data-a="hrConnect">♥ подключить пульс</button>`; }
 function updHR(){ updCardio(); const c=$('#hrChip'); if(c) c.outerHTML=hrChip(); const t=$('#tmHr'); if(t) t.innerHTML=tmHr(); }
 const tmHr=()=>hrFresh()?`<span style="color:${ZC[Math.max(0,hrZone(HR.bpm))]}">♥</span> ${HR.bpm}`:'';
-function hrSummary(h){ if(!h||!h.s||h.s.length<2) return null; const v=h.s.map(x=>x[1]); const z=[0,0,0,0,0];
-  for(let i=1;i<h.s.length;i++){ const dt=Math.min(30,h.s[i][0]-h.s[i-1][0]); const k=hrZone(h.s[i][1]); if(k>=0) z[k]+=dt; }
+function hrSummary(h,mx){ const M=mx||S.settings.hrMax; if(!h||!h.s||h.s.length<2) return null; const v=h.s.map(x=>x[1]); const z=[0,0,0,0,0];
+  for(let i=1;i<h.s.length;i++){ const dt=Math.min(30,h.s[i][0]-h.s[i-1][0]); const pc=M?h.s[i][1]/M:0; const k=!M?-1:pc<.6?0:pc<.7?1:pc<.8?2:pc<.9?3:4; if(k>=0) z[k]+=dt; }
   const ds=[]; let lt=-99; h.s.forEach(x=>{ if(x[0]-lt>=10){ ds.push(x); lt=x[0]; } });
-  return {avg:Math.round(v.reduce((a,b)=>a+b,0)/v.length),max:Math.max(...v),min:Math.min(...v),z,hrMax:S.settings.hrMax||null,s:ds}; }
+  return {avg:Math.round(v.reduce((a,b)=>a+b,0)/v.length),max:Math.max(...v),min:Math.min(...v),z,hrMax:M||null,s:ds}; }
 
 /* ---------- cardio: heart-rate thresholds (aerobike sprints) ---------- */
 const CAR={tm:null,armUp:true,armDown:false,state:null,lowAt:null,hiAt:null,sp:null,spT:null,rec:null};
@@ -574,7 +585,7 @@ function viewCardio(){ const c=cs();
     <button class="bell ${c[sig]?'on':''}" data-a="cTog" data-k="${sig}" aria-pressed="${c[sig]}" aria-label="Сигнал ${c[sig]?'включён':'выключен'}">${c[sig]?'Сигнал вкл':'Сигнал выкл'}</button></div>
     <div class="stp" style="height:52px;grid-template-columns:52px 1fr 52px"><button data-a="cThr" data-k="${k}" data-d="-5" aria-label="Минус 5">−5</button><input id="cThr_${k}" data-f="cThrIn" data-k="${k}" inputmode="numeric" value="${c[k]}" aria-label="${lbl}"><button data-a="cThr" data-k="${k}" data-d="5" aria-label="Плюс 5">+5</button></div></div>`;
   const pts=CAR.rec&&CAR.rec.s.length>1?CAR.rec.s.slice(-300).map(x=>({x:fmtSec(x[0]),y:x[1]})):null;
-  let b=`<div id="cClocks">${clocksHtml()}</div><div id="cPanel">${cardioPanel()}</div>
+  let b=`<button class="btn wide big outline" data-a="go" data-v="mito">Протокол митохондрий ›</button><div id="cClocks">${clocksHtml()}</div><div id="cPanel">${cardioPanel()}</div>
   ${HR.state==='on'?'':`<button class="btn primary wide" data-a="hrConnect">♥ Подключить Polar H9</button>`}
   <div id="spBox">${sprintHtml()}</div>
   <section class="card">${thr('hi','Верхняя граница — цель','sigHi','Сигнал, когда пульс поднялся до этого значения')}${thr('lo','Нижняя граница — восстановление','sigLo','Сигнал, когда пульс опустился до этого значения')}
@@ -586,6 +597,247 @@ function viewCardio(){ const c=cs();
   ${CAR.rec?`<button class="btn primary wide big" data-a="cStop">Завершить и сохранить</button><button class="btn ghost danger" data-a="cCancel">Отменить тренировку</button>`:`<button class="btn primary wide big" data-a="cRec">Начать тренировку</button><p class="muted" style="font-size:13px">Запустится общее время${cs().warm?' и разминка '+fmtSec(cs().warm)+' — пока она идёт, сигналы границ молчат':''}. В историю сохранятся пульс, рывки и время восстановления. Сигналы границ работают и без старта тренировки.</p>`}`;
   return {head:hdr(c.name,{back:true,sub:CAR.rec?'тренировка идёт':'монитор пульса'}),body:b};
 }
+
+/* ---------- mitochondria protocol v2 (aerobike, revised by research) ---------- */
+const MITO={run:null};
+const MTYPES={A:'Спринты',B:'Аэробная',T:'Тесты',SE:'Скоростная выносливость'};
+function defPlan(age){ const r1=age>=45?75:60, r2=age>=45?90:75;
+  const A=(series,sets,work,rest)=>({series,sets,work,rest});
+  return [
+    {a:A(2,5,8,r1),b:{type:'z2',min:30,reps:4,work:4,rest:3},deload:false,tests:false,se:false},
+    {a:A(2,6,8,r1),b:{type:'z2',min:35,reps:4,work:4,rest:3},deload:false,tests:false,se:false},
+    {a:A(3,6,8,r1),b:{type:'z2',min:40,reps:4,work:4,rest:3},deload:false,tests:false,se:false},
+    {a:A(2,5,8,r1),b:{type:'z2',min:25,reps:4,work:4,rest:3},deload:true,tests:true,se:false},
+    {a:A(3,6,10,r2),b:{type:'int',min:30,reps:4,work:4,rest:3},deload:false,tests:false,se:false},
+    {a:A(3,8,10,r2),b:{type:'z2',min:40,reps:4,work:4,rest:3},deload:false,tests:false,se:true},
+    {a:A(4,6,10,r2),b:{type:'int',min:30,reps:5,work:4,rest:3},deload:false,tests:false,se:true},
+    {a:A(2,6,10,Math.max(r2,90)),b:{type:'z2',min:30,reps:4,work:4,rest:3},deload:true,tests:true,se:false}]; }
+function defProfile(name,age){ return {v:2,id:'p'+uid(),name,age,hrMax:null,warm:480,cool:300,between:300,byHr:false,recHi:70,hrStop:80,pDrop:15,mode:'count',nA:1,nB:1,week:1,doneA:0,doneB:0,plan:defPlan(age)}; }
+function defMito(){ const p=defProfile('Мой профиль',52); return {profiles:[p],active:p.id}; }
+const mp=()=>{ const m=S.mito; return m.profiles.find(p=>p.id===m.active)||m.profiles[0]; };
+const mHrMax=p=>p.hrMax||Math.round(208-0.7*p.age);
+const mPct=(p,x)=>Math.round(mHrMax(p)*x/100);
+const mAvg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+function mSig(k){ if(MITO.run&&MITO.run.muted) return; cSig(k); }
+
+function mBuild(p,type,w,opts){ const st=[]; const pc=x=>mPct(p,x);
+  st.push({ph:'warm',sec:type==='B'?Math.min(p.warm,300):type==='T'?600:p.warm,lbl:'Разминка',hint:type==='A'||type==='T'||type==='SE'?'Лёгкое кручение, в конце 2–3 разгона на 50–70%':'Лёгкое кручение'});
+  if(type==='A'){ const a=w.a; for(let se=1;se<=a.series;se++){ for(let n=1;n<=a.sets;n++){ st.push({ph:'work',sec:a.work,se,n,S:a.series,N:a.sets,lbl:'РАБОТА',hint:'Почти максимум · RPE 9–10'}); if(n<a.sets) st.push({ph:'rest',sec:a.rest,lbl:'Отдых · лёгкое кручение'}); } if(se<a.series) st.push({ph:'between',sec:p.between,lbl:'Отдых между сериями',hint:'Пусть дыхание успокоится'}); } }
+  if(type==='SE'){ for(let n=1;n<=4;n++){ st.push({ph:'work',sec:20,se:1,n,S:1,N:4,lbl:'РАБОТА',hint:'Мощно, держать темп все 20 с'}); if(n<4) st.push({ph:'rest',sec:210,lbl:'Отдых · лёгкое кручение'}); } }
+  if(type==='B'){ const b=w.b; if(b.type==='z2') st.push({ph:'steady',sec:b.min*60,lbl:'Зона 2',zone:[pc(65),pc(75)],hint:'Ровно, можно говорить фразами'});
+    else for(let i=1;i<=b.reps;i++){ st.push({ph:'steady',sec:b.work*60,lbl:`Интервал ${i} из ${b.reps}`,zone:[pc(85),pc(90)],hint:'Тяжело, но ровно все 4 минуты'}); if(i<b.reps) st.push({ph:'rest',sec:b.rest*60,lbl:'Отдых · лёгкое кручение'}); } }
+  if(type==='T'){ const o=opts||{fix:true,rsa:true,max:true};
+    if(o.fix) st.push({ph:'steady',sec:600,test:'fix',lbl:'Тест 1 · 10 мин на пульсе',zone:[pc(70),pc(75)],hint:'Держите пульс в коридоре. Запомните средние ватты за последние 5 минут'});
+    if(o.fix&&(o.rsa||o.max)) st.push({ph:'between',sec:180,lbl:'Отдых'});
+    if(o.rsa) for(let n=1;n<=8;n++){ st.push({ph:'work',sec:8,se:1,n,S:1,N:8,test:'rsa',lbl:'СПРИНТ',hint:'Всё, что есть · all-out'}); if(n<8) st.push({ph:'rest',sec:52,lbl:'Отдых · запишите ватты'}); }
+    if(o.rsa&&o.max) st.push({ph:'between',sec:300,lbl:'Отдых перед последним тестом'});
+    if(o.max) st.push({ph:'steady',sec:300,test:'max',lbl:'Тест 3 · 5 минут на максимум',hint:'Ровно и максимально. Запомните средние ватты или калории'}); }
+  st.push({ph:'cool',sec:p.cool,lbl:'Заминка',hint:'Лёгкое кручение'});
+  return st; }
+const mStep=()=>{ const r=MITO.run; return r&&r.steps[r.idx]; };
+function mEnter(i){ const r=MITO.run, now=Date.now(); r.tr=null; r.idx=i; const s=r.steps[i]; if(!s){ mDone(); return; }
+  r.t0=now; r.t1=now+s.sec*1000; r.lastTick=null; r.zs={out:null,since:now,sig:null};
+  if(s.ph==='work'){ const b=hrFresh()?HR.bpm:null; r.recs.push({se:s.se,n:s.n,test:s.test||null,t:Math.round((now-r.start)/1000),startMs:now,endT:null,restSec:null,peak:b,hrRest:null,drop:null,wait:r.waitAcc||0,w:null,burn:false}); r.waitAcc=0; mSig('go'); }
+  else if(s.ph==='steady') mSig('go');
+  persist(); if(UI.view==='mito') render(); }
+function mDone(){ const r=MITO.run; r.done=true; r.doneAt=Date.now()-r.start; r.tr=null; r.idx=r.steps.length; mSig('tmEnd'); persist(); if(UI.view==='mito') render(); }
+function mEndStep(){ const r=MITO.run, s=mStep(), now=Date.now(); if(!s){ mDone(); return; }
+  const nx=r.steps[r.idx+1];
+  if(s.ph==='work'){ const rc=r.recs[r.recs.length-1]; if(rc){ rc.endT=now; rc.restSec=nx&&nx.ph==='rest'?nx.sec:null; if(!rc.restSec) rc.hrRest=-1; } mSig('stop'); }
+  else if(s.ph==='steady') mSig('tmEnd');
+  if(s.ph==='rest'&&(r.type==='A'||r.type==='SE')&&!r.warnStop&&hrFresh()&&HR.bpm>r.hrStop){ r.warnStop=HR.bpm; mSig('hi'); }
+  if(nx&&nx.ph==='work'&&s.ph==='rest'&&r.byHr&&hrFresh()&&HR.bpm>r.recHi){ r.tr={k:'wait',start:now}; persist(); if(UI.view==='mito') render(); return; }
+  mEnter(r.idx+1); }
+function mZone(s,now){ const r=MITO.run, z=r.zs; if(!hrFresh()) return; const b=HR.bpm; const out=b>s.zone[1]?'hi':b<s.zone[0]?'lo':null;
+  if(now-r.t0>30000){ r.zt=(r.zt||0)+(out?0:.2); r.zn=(r.zn||0)+.2; }
+  if(out!==z.out){ z.out=out; z.since=now; if(UI.view==='mito') render(); }
+  if(out&&z.sig!==out&&now-z.since>=8000&&now-r.t0>30000){ z.sig=out; mSig(out); }
+  if(!out) z.sig=null; }
+function mTick(){ const r=MITO.run; if(!r||r.done||r.paused!=null) return; const now=Date.now();
+  const rc=r.recs[r.recs.length-1];
+  if(rc&&rc.endT&&rc.hrRest==null&&rc.restSec&&now-rc.endT>=rc.restSec*1000){ rc.hrRest=hrFresh()?HR.bpm:-1; if(rc.hrRest>0&&rc.peak) rc.drop=rc.peak-rc.hrRest; persist(); }
+  if(r.tr){ if(r.tr.k==='wait'){ if(!hrFresh()||HR.bpm<=r.recHi){ r.waitAcc=Math.round((now-r.tr.start)/1000); if(hrFresh()) mSig('lo'); r.tr={k:'ready',end:now+3000}; r.lastTick=null; persist(); if(UI.view==='mito') render(); } else updMito(); return; }
+    const sec=Math.ceil((r.tr.end-now)/1000); if(sec>0&&sec!==r.lastTick){ r.lastTick=sec; mSig('tick'); } if(now>=r.tr.end) mEnter(r.idx+1); else updMito(); return; }
+  const s=mStep(); if(!s) return;
+  const rem=r.t1-now, sec=Math.ceil(rem/1000), nx=r.steps[r.idx+1];
+  if(rem>0&&sec!==r.lastTick){ const intoWork=nx&&nx.ph==='work'&&s.ph!=='work';
+    if(sec<=3&&(s.ph==='work'||intoWork)){ r.lastTick=sec; mSig('tick'); }
+    else if(sec===10&&s.sec>15){ r.lastTick=sec; mSig('tick'); } }
+  if(s.ph==='steady'&&s.zone) mZone(s,now);
+  if(rem<=0) mEndStep(); else updMito(); }
+setInterval(mTick,200);
+function mitoHr(b){ const r=MITO.run; if(!r||r.done) return; const now=Date.now();
+  const t=Math.round((now-r.start)/1000), l=r.s[r.s.length-1]; if(!l||t-l[0]>=2){ r.s.push([t,b]); persist(); }
+  const rc=r.recs[r.recs.length-1]; if(rc&&(rc.hrRest==null||now-rc.startMs<40000)&&(rc.peak==null||b>rc.peak)) rc.peak=b;
+  const s=mStep();
+  if(s&&s.test==='max'){ r.res.maxHr=Math.max(r.res.maxHr||0,b); }
+  if(s&&s.test==='fix'&&now-r.t0>=(s.sec-300)*1000){ r.res.fixSum=(r.res.fixSum||0)+b; r.res.fixN=(r.res.fixN||0)+1; }
+  updMito(); }
+function mBigTxt(){ const r=MITO.run, now=Date.now(); if(r.done) return fmtDur(r.doneAt); if(r.paused!=null) return fmtSec(Math.ceil(r.paused/1000));
+  if(r.tr) return r.tr.k==='wait'?'+'+fmtSec((now-r.tr.start)/1000):String(Math.max(1,Math.ceil((r.tr.end-now)/1000)));
+  return fmtSec(Math.ceil(Math.max(0,r.t1-now)/1000)); }
+function mDesc(s){ if(!s) return ''; if(s.ph==='work') return s.test==='rsa'?`спринт ${s.n} из ${s.N}`:`серия ${s.se} из ${s.S}, подход ${s.n} из ${s.N}`; if(s.ph==='cool') return 'заминка'; return s.lbl.toLowerCase(); }
+function mProgTxt(){ const r=MITO.run; if(r.done){ const n=r.recs.filter(x=>x.endT).length; return n?`Выполнено подходов: ${n}`:'Время: '+durTxt(r.doneAt); }
+  const s=mStep(), nx=r.steps[r.idx+1]; if(r.tr) return 'Дальше: '+mDesc(nx);
+  if(s.ph==='work') return s.test==='rsa'?`Спринт ${s.n} из ${s.N}`:`Серия ${s.se} из ${s.S} · подход ${s.n} из ${s.N}`;
+  return nx?'Дальше: '+mDesc(nx):'Последний этап'; }
+function mLastTxt(){ const r=MITO.run, ls=[...r.recs].reverse().find(s=>s.endT); if(!ls) return '';
+  return `${ls.test==='rsa'?'Спринт '+ls.n:'Подход '+ls.se+'.'+ls.n}: пик пульса <b>${ls.peak??'—'}</b>${ls.drop!=null?` · за ${ls.restSec} с упал на <b>${ls.drop}</b>`:''}`; }
+function mHrColor(){ const r=MITO.run, s=mStep(); if(!hrFresh()) return ''; const b=HR.bpm;
+  if(s&&s.ph==='steady'&&s.zone) return b>s.zone[1]?'var(--bad)':b<s.zone[0]?'var(--p-blue)':'var(--good)';
+  return b>r.hrStop?'var(--bad)':'var(--fg)'; }
+function updMito(){ const r=MITO.run; if(!r||UI.view!=='mito') return;
+  const a=$('#mBig'); if(a) a.textContent=mBigTxt(); const t=$('#mTot'); if(t) t.textContent=fmtDur(r.done?r.doneAt:Date.now()-r.start);
+  const h=$('#mHrv'); if(h){ h.textContent=hrFresh()?HR.bpm:'—'; h.style.color=mHrColor(); }
+  const l=$('#mLast'); if(l) l.innerHTML=mLastTxt(); }
+function mDropPct(){ const r=MITO.run; if(r.type!=='A') return null; const ls=[...r.recs].reverse().find(x=>x.endT); if(!ls||ls.w==null) return null;
+  const same=r.recs.filter(x=>x.se===ls.se&&x.w!=null); if(same.length<2) return null; const best=Math.max(...same.map(x=>x.w)); const d=Math.round((1-ls.w/best)*100); return d>=r.pDrop?d:null; }
+function mSeriesLeft(){ const r=MITO.run; for(let j=r.idx;j<r.steps.length;j++){ const s=r.steps[j]; if(s.ph==='between'||s.ph==='cool') return false; if(s.ph==='work') return true; } return false; }
+function mEndSeries(){ const r=MITO.run; let j=r.idx; while(j<r.steps.length&&r.steps[j].ph!=='between'&&r.steps[j].ph!=='cool') j++; r.paused=null; mEnter(j); }
+
+function mStartRun(type,opts){ const p=mp(); const wi=Math.min(p.week,p.plan.length), w=p.plan[wi-1]; if(!w){ toast('В таблице нет недель'); return; }
+  audio(); wakeOn(); hrAuto(); closeSheet();
+  const desc=type==='A'?`${w.a.series} × ${w.a.sets} × ${w.a.work} с, отдых ${w.a.rest} с`:type==='B'?(w.b.type==='z2'?`Зона 2 · ${w.b.min} мин`:`${w.b.reps} × ${w.b.work} мин на 85–90%, отдых ${w.b.rest} мин`):type==='SE'?'4 × 20 с, отдых 3:30':'Тесты';
+  MITO.run={v:2,id:uid(),pid:p.id,pname:p.name,type,week:wi,deload:!!w.deload,desc,start:Date.now(),steps:mBuild(p,type,w,opts),idx:0,recs:[],s:[],res:{},
+    hrMax:mHrMax(p),hrStop:mPct(p,p.hrStop),recHi:mPct(p,p.recHi),byHr:p.byHr,pDrop:p.pDrop,muted:false,paused:null,tr:null,waitAcc:0};
+  mEnter(0); UI.view='mito'; render(); window.scrollTo(0,0); }
+function mSave(counted){ const r=MITO.run; if(!r) return; const p=S.mito.profiles.find(x=>x.id===r.pid);
+  const recs=r.recs.filter(x=>x.endT).map(x=>{ const {startMs,endT,...o}=x; if(o.hrRest===-1) o.hrRest=null; return o; });
+  const res={...r.res}; if(res.fixN) res.fixHr=Math.round(res.fixSum/res.fixN); delete res.fixSum; delete res.fixN;
+  const rs=recs.filter(x=>x.test==='rsa'&&x.w); if(rs.length>=2){ const best=Math.max(...rs.map(x=>x.w)), mean=mAvg(rs.map(x=>x.w)); res.rsaBest=best; res.rsaMean=Math.round(mean); res.rsaDec=Math.round((1-mean/best)*1000)/10; }
+  const s={id:r.id,kind:'mito',v:2,type:r.type,profileId:r.pid,name:MTYPES[r.type]+' · '+r.pname,start:r.start,end:r.start+(r.doneAt||Date.now()-r.start),gymId:S.gymId,gymName:gymOf(S.gymId).name,tplId:null,note:'',entries:[],prs:[],
+    week:r.week,deload:r.deload,desc:r.desc,hrMax:r.hrMax,hrStop:r.hrStop,recs,res,warnStop:r.warnStop||null,zonePct:r.zn?Math.round(100*(r.zt||0)/r.zn):null,counted:!!counted};
+  const hs=hrSummary({s:r.s},r.hrMax); if(hs) s.hr=hs;
+  SESS.push(s); saveSession(s);
+  if(counted&&p&&p.mode==='count'&&(r.type==='A'||r.type==='B')){ if(r.type==='A') p.doneA=(p.doneA||0)+1; else p.doneB=(p.doneB||0)+1;
+    if(p.doneA>=p.nA&&p.doneB>=p.nB){ p.week=Math.min(p.week+1,p.plan.length+1); p.doneA=0; p.doneB=0; } }
+  MITO.run=null; saveState(); flush(); if(!ACT) wakeOff(); closeSheet();
+  UI.tab='hist'; UI.view='session'; UI.id=s.id; UI.stack=[]; UI.fresh=s.id; render(); window.scrollTo(0,0); }
+function mFinishSheet(){ const r=MITO.run; const n=r.recs.filter(s=>s.endT).length;
+  openSheet(`<h2>Завершить тренировку?</h2><p class="muted">${r.done?'':'Тренировка ещё не дошла до конца. '}${n?`Выполнено подходов: ${n}.`:''} ${r.type==='A'||r.type==='B'?'Засчитанная тренировка продвигает неделю протокола.':''}</p>
+  <div class="stack"><button class="btn primary wide" data-a="mSave" data-c="1">${r.type==='A'||r.type==='B'?'Сохранить и засчитать':'Сохранить'}</button>${r.type==='A'||r.type==='B'?'<button class="btn wide" data-a="mSave" data-c="0">Сохранить без зачёта</button>':''}<button class="btn wide ghost danger" data-a="mDiscard">Не сохранять</button><button class="btn wide" data-a="closeSheet">Продолжить тренировку</button></div>`); }
+function mTestSheet(){ openSheet(`<h2>Тесты</h2><p class="muted">Делайте в одинаковых условиях: то же время дня, не после тяжёлой тренировки. Все три теста — около 45 минут вместе с разминкой.</p>
+  <label class="check"><input type="checkbox" id="tFix" checked> Тест 1 · 10 минут на пульсе ${mPct(mp(),70)}–${mPct(mp(),75)}: средние ватты</label>
+  <label class="check"><input type="checkbox" id="tRsa" checked> Тест 2 · 8 спринтов по 8 с, старт каждую минуту: падение мощности</label>
+  <label class="check"><input type="checkbox" id="tMax" checked> Тест 3 · 5 минут на максимум: ватты или калории и реальный пик пульса</label>
+  <div class="btns"><button class="btn" data-a="closeSheet">Отмена</button><button class="btn primary" data-a="mTestGo">Начать</button></div>`); }
+
+/* views */
+function mWeekState(p){ const P=p.plan; if(p.week>P.length) return null; return P[p.week-1]; }
+function mBDesc(b){ return b.type==='z2'?`Зона 2 · ${b.min} мин`:`${b.reps} × ${b.work} мин · 85–90%, отдых ${b.rest} мин`; }
+function viewMito(){ if(MITO.run) return viewMitoRun();
+  const p=mp(), P=p.plan, w=mWeekState(p), hist=fin().filter(s=>s.kind==='mito'&&s.profileId===p.id), tests=hist.filter(s=>s.type==='T');
+  let b=`<div class="chips">${S.mito.profiles.map(x=>`<button class="chip ${x.id===p.id?'on':''}" data-a="mProf" data-id="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip" data-a="mNew">+ Профиль</button></div>`;
+  b+=`<section class="card"><div class="row"><div class="grow"><div class="lbl">${esc(p.name)} · ${p.age} ${plural(p.age,'год','года','лет')}</div><div style="font-weight:600">ЧСС макс. ${mHrMax(p)} ${p.hrMax?'<span class="badge good">замер</span>':'<span class="badge">формула ±10</span>'}</div><div class="muted" style="font-size:14px">Зона 2: ${mPct(p,65)}–${mPct(p,75)} · интервалы ${mPct(p,85)}–${mPct(p,90)} · стоп в паузе > ${mPct(p,p.hrStop)}</div></div><button class="btn sm" data-a="go" data-v="mitoProf" data-id="${p.id}">Изменить</button></div></section>`;
+  if(!tests.length) b+=`<div class="banner"><div class="grow"><b>Начните с тестов (неделя 0).</b> Без них не видно, растёт ли результат. Тест 3 заодно покажет ваш реальный максимальный пульс.</div><button class="btn primary sm" data-a="mTests">Тесты</button></div>`;
+  if(!w) b+=`<section class="next"><div><div class="lbl">Протокол</div><h2>Цикл завершён</h2><p class="muted" style="font-size:14px">Если тесты улучшились — поддержка: 1 спринт-сессия и 1 аэробная в неделю. Если нет — сначала сон и нагрузка BJJ, потом больше аэробного объёма.</p></div><div class="btns"><button class="btn" data-a="mStart" data-t="A">Спринты</button><button class="btn" data-a="mStart" data-t="B">Аэробная</button></div><button class="btn primary wide" data-a="mNewCycle">Начать новый цикл</button></section>`;
+  else { const ok=(n,need)=>p.mode==='count'?`<span class="badge ${n>=need?'good':''}">${n} из ${need}</span>`:'';
+    b+=`<section class="next"><div><div class="lbl">Неделя ${p.week} из ${P.length}${w.deload?' · разгрузка':''}${w.tests?' · тесты':''}</div>
+    <div class="plan-l"><div><span><b style="font-family:var(--f-body);font-size:15px">A</b> Спринты ${ok(p.doneA||0,p.nA)}</span><b>${w.a.series} × ${w.a.sets} × ${w.a.work} с</b></div><div><span>отдых между подходами / сериями</span><b>${w.a.rest} с / ${fmtSec(p.between)}</b></div>
+    <div><span><b style="font-family:var(--f-body);font-size:15px">B</b> Аэробная ${ok(p.doneB||0,p.nB)}</span><b>${mBDesc(w.b)}</b></div></div></div>
+    ${HR.state==='on'?'':'<button class="btn wide" data-a="hrConnect">♥ Подключить Polar H9</button>'}
+    <div class="btns"><button class="btn primary big" data-a="mStart" data-t="A">Спринты A</button><button class="btn primary big" data-a="mStart" data-t="B">Аэробная B</button></div>
+    ${w.tests?'<button class="btn wide outline" data-a="mTests">Тесты этой недели</button>':''}
+    ${w.se?'<button class="btn wide" data-a="mStart" data-t="SE">Скоростная выносливость 4 × 20 с</button><p class="muted" style="font-size:13px">По желанию и только если на этой неделе спарринги лёгкие.</p>':''}</section>`; }
+  b+=`<section class="card"><div class="row"><div class="lbl grow">Неделя протокола</div><button class="btn sm ghost" data-a="go" data-v="mitoPlan" data-id="${p.id}">Таблица</button></div><div class="chips">${P.map((x,i)=>`<button class="chip ${p.week===i+1?'on':''}" data-a="mWeek" data-i="${i+1}">${i+1}${x.deload?' р':''}</button>`).join('')}</div>
+    <p class="muted" style="font-size:13px">${p.mode==='count'?`Неделя сменится, когда будут засчитаны ${p.nA} ${plural(p.nA,'спринт-сессия','спринт-сессии','спринт-сессий')} и ${p.nB} ${plural(p.nB,'аэробная','аэробные','аэробных')}. Неделю можно выбрать вручную.`:'Неделю выбираете вручную.'} «р» — разгрузка.</p></section>`;
+  b+=mMarkers(p,hist);
+  if(hist.length) b+=`<section class="card"><div class="lbl">Тренировки профиля</div><div class="list">${[...hist].reverse().slice(0,15).map(s=>`<button class="li" data-a="go" data-v="session" data-id="${s.id}"><div class="grow"><div class="t">${s.v===2?MTYPES[s.type]:'Спринты (старый протокол)'} · ${dfmt(s.start,{weekday:'short',day:'numeric',month:'short'})}</div><div class="s">неделя ${s.week} · ${esc(s.desc||'')}${s.v===2&&!s.counted&&(s.type==='A'||s.type==='B')?' · не засчитана':''}</div></div><span class="chev">${IC.chev}</span></button>`).join('')}</div></section>`;
+  b+=`<button class="btn wide" data-a="go" data-v="mitoGuide">Руководство по методике</button>`;
+  return {head:hdr('Митохондрии',{back:true,sub:'протокол на аэробайке'}),body:b}; }
+function mMarkers(p,hist){ const T=hist.filter(s=>s.type==='T'); let b=`<section class="card"><div class="lbl">Маркеры роста · тесты</div>`;
+  if(!T.length) return b+`<p class="muted">Появятся после первых тестов. Повторяйте их на 4-й и 8-й неделе.</p></section>`;
+  b+=`<div class="tbl-wrap"><table><tr><th>Дата</th><th>Ватты на пульсе</th><th>Спринты: ср. / падение</th><th>5 мин</th></tr>${T.map(s=>{ const r=s.res||{}; return `<tr><td>${dfmt(s.start)}</td><td class="num">${r.fixW?r.fixW+' Вт':'—'}${r.fixHr?` <span class="muted">@${r.fixHr}</span>`:''}</td><td class="num">${r.rsaMean?r.rsaMean+' Вт / '+fmt(r.rsaDec,1)+'%':'—'}</td><td class="num">${r.maxW?r.maxW+' Вт':r.maxCal?r.maxCal+' ккал':'—'}</td></tr>`; }).join('')}</table></div>`;
+  const fx=T.filter(s=>s.res&&s.res.fixW); if(fx.length>=2) b+=`<div class="lbl" style="margin-top:6px">Ватты на одном и том же пульсе</div>${lineChart(fx.map(s=>({x:dfmt(s.start),y:s.res.fixW})),'Вт')}`;
+  b+=`<p class="muted" style="font-size:13px">Растут ватты на том же пульсе, падение мощности в спринтах уменьшается, результат 5 минут растёт — значит, адаптация идёт. Если 2–3 недели всё стоит — проверьте сон и нагрузку BJJ, потом добавляйте аэробный объём.</p></section>`;
+  return b; }
+function viewMitoRun(){ const r=MITO.run, s=mStep(), nx=r.steps[r.idx+1], ls=[...r.recs].reverse().find(x=>x.endT);
+  const cls=r.done?'done':r.tr?(r.tr.k==='wait'?'wait':'ready'):s.ph==='steady'?('steady '+(r.zs&&r.zs.out||'in')):s.ph;
+  const lbl=r.done?'Тренировка завершена':r.tr?(r.tr.k==='wait'?`Ждём пульс ≤ ${r.recHi}`:'Приготовиться'):s.lbl;
+  const hint=r.done||r.tr?'':s.ph==='steady'&&s.zone?`Держите пульс ${s.zone[0]}–${s.zone[1]}${r.zs&&r.zs.out==='hi'?' · снизьте темп':r.zs&&r.zs.out==='lo'?' · прибавьте':''}`:(s.hint||'');
+  let b=`<div class="mph ${cls}"><div class="mlbl">${esc(lbl)}${r.paused!=null?' · пауза':''}</div>${hint?`<div class="mhint">${esc(hint)}</div>`:''}<div class="mbig num" id="mBig">${mBigTxt()}</div><div class="mprog">${mProgTxt()}</div></div>`;
+  const zoneTile=s&&s.ph==='steady'&&s.zone?`<div><span>Цель</span><b class="num">${s.zone[0]}–${s.zone[1]}</b></div>`:`<div><span>Стоп в паузе</span><b class="num">&gt; ${r.hrStop}</b></div>`;
+  b+=`<div class="mhr"><div><span>Пульс</span><b class="num" id="mHrv" style="color:${mHrColor()}">${hrFresh()?HR.bpm:'—'}</b></div>${zoneTile}<div><span>ЧСС макс.</span><b class="num">${r.hrMax}</b></div></div>`;
+  if(HR.state!=='on') b+=`<button class="btn wide" data-a="hrConnect">♥ Подключить Polar H9</button>`;
+  if(r.recs.length) b+=`<div class="last" id="mLast" style="padding:0 4px">${mLastTxt()}</div>`;
+  if(r.warnStop&&!r.done) b+=`<div class="banner" style="background:var(--bad-soft)"><div class="grow">В конце паузы пульс был ${r.warnStop} — выше ${r.hrStop}. Разумно закончить тренировку.</div><button class="btn sm" data-a="mFinish">Закончить</button></div>`;
+  const dp=!r.done&&mDropPct(); if(dp&&mSeriesLeft()) b+=`<div class="banner" style="background:var(--bad-soft)"><div class="grow">Мощность упала на ${dp}% от лучшего подхода серии. Серию пора закончить.</div><button class="btn sm" data-a="mEndSeries">Закончить серию</button></div>`;
+  if(!r.done) b+=`<div class="tmctl"><button class="go" data-a="${r.paused!=null?'mResume':'mPause'}">${r.paused!=null?'Продолжить':'Пауза'}</button><button data-a="mSkip">${s&&s.ph==='work'&&!r.tr?'Закончить подход':'Дальше'}</button><button data-a="mMute">${r.muted?'Звук выкл':'Звук вкл'}</button></div>`;
+  if(ls&&!(s&&s.ph==='work'&&!r.tr)&&!r.done) b+=mRecCard(ls,r);
+  if(r.type==='T') b+=mTestCard(r);
+  if(r.done){ const n=r.recs.filter(x=>x.endT); const ws=n.map(x=>x.w).filter(x=>x);
+    b+=`<div class="tiles"><div class="tile"><b>${durTxt(r.doneAt)}</b><span>длительность</span></div><div class="tile"><b>${n.length||'—'}</b><span>подходов</span></div><div class="tile"><b>${ws.length?Math.round(mAvg(ws)):r.zn?Math.round(100*(r.zt||0)/r.zn)+'%':'—'}</b><span>${ws.length?'средние ватты':r.zn?'времени в зоне':'ватты не вписаны'}</span></div></div>`;
+    if(n.length&&r.type!=='T') b+=`<section class="card"><div class="lbl">Ватты по подходам (по желанию)</div><div class="wgrid">${n.map((x,i)=>`<label class="field"><span>${x.se}.${x.n}</span><input class="in pin" id="mw${i}" data-f="mWi" data-i="${r.recs.indexOf(x)}" inputmode="numeric" value="${x.w??''}" placeholder="—"></label>`).join('')}</div></section>`;
+    const p=S.mito.profiles.find(x=>x.id===r.pid);
+    if(r.res.maxHr&&p&&r.res.maxHr>(p.hrMax||0)&&r.res.maxHr!==mHrMax(p)) b+=`<div class="banner"><div class="grow">Пик пульса в тесте 5 минут: <b>${r.res.maxHr}</b>. Сейчас в профиле ${mHrMax(p)}${p.hrMax?'':' по формуле'}. Записывайте, если выложились в тесте полностью.</div><button class="btn primary sm" data-a="mSetMax">Записать ${r.res.maxHr}</button></div>`;
+    b+=`<div class="stack">${r.type==='A'||r.type==='B'?'<button class="btn primary big wide" data-a="mSave" data-c="1">Сохранить и засчитать</button><button class="btn wide" data-a="mSave" data-c="0">Сохранить без зачёта</button>':'<button class="btn primary big wide" data-a="mSave" data-c="1">Сохранить</button>'}<button class="btn ghost danger" data-a="mDiscard">Не сохранять</button></div>`; }
+  return {head:hdr(r.pname,{sub:`<span>${MTYPES[r.type]} · неделя ${r.week}</span><span id="mTot" class="num">${fmtDur(r.done?r.doneAt:Date.now()-r.start)}</span>`,right:r.done?'':'<button class="btn primary sm" data-a="mFinish">Завершить</button>'}),body:b}; }
+function mRecCard(ls,r){ return `<section class="card"><div class="lbl">${ls.test==='rsa'?'Спринт '+ls.n:'Подход '+ls.se+'.'+ls.n} · ватты с экрана аэробайка</div>
+  <div class="row"><div class="grow">Ватты ${ls.test==='rsa'?'':'<span class="muted">(по желанию)</span>'}</div><div class="stp" style="width:170px;height:48px"><button data-a="mW" data-d="-10" aria-label="Меньше">−</button><input id="mWin" data-f="mWin" inputmode="numeric" value="${ls.w??''}" placeholder="—" aria-label="Ватты"><button data-a="mW" data-d="10" aria-label="Больше">+</button></div></div>
+  ${r.type==='A'?`<p class="muted" style="font-size:13px">По ваттам программа следит за падением мощности: больше ${r.pDrop}% от лучшего подхода серии — серию пора заканчивать.</p><button class="btn wide ${ls.burn?'danger outline':''}" data-a="mBurn">${ls.burn?'Отмечено: жжение к концу подхода':'Было жжение к концу подхода'}</button>${ls.burn?'<p class="muted" style="font-size:13px">Если жжёт уже к 10-й секунде — сократите подход до 8 с, мощность не снижайте.</p>':''}`:''}</section>`; }
+function mTestCard(r){ const doneIdx=t=>{ const i=r.steps.findIndex(s=>s.test===t); return i>=0&&(r.done||r.idx>i); }; let f='';
+  if(doneIdx('fix')) f+=`<label class="field"><span>Тест 1: средние ватты за последние 5 минут${r.res.fixN?` (средний пульс ${Math.round(r.res.fixSum/r.res.fixN)})`:''}</span><input class="in" id="tr_fixW" data-f="mRes" data-k="fixW" inputmode="numeric" value="${r.res.fixW??''}"></label>`;
+  if(r.steps.some(s=>s.test==='rsa')&&(r.done||r.recs.some(x=>x.test==='rsa'&&x.endT))){ const rs=r.recs.filter(x=>x.test==='rsa'&&x.w); if(rs.length>=2){ const best=Math.max(...rs.map(x=>x.w)), mean=mAvg(rs.map(x=>x.w)); f+=`<p>Тест 2: лучший ${best} Вт · средний ${Math.round(mean)} Вт · падение <b>${fmt((1-mean/best)*100,1)}%</b></p>`; } else f+=`<p class="muted">Тест 2: впишите ватты каждого спринта в паузе.</p>`; }
+  if(doneIdx('max')) f+=`<div class="fgrid"><label class="field"><span>Тест 3: средние ватты</span><input class="in" id="tr_maxW" data-f="mRes" data-k="maxW" inputmode="numeric" value="${r.res.maxW??''}"></label><label class="field"><span>или калории</span><input class="in" id="tr_maxCal" data-f="mRes" data-k="maxCal" inputmode="numeric" value="${r.res.maxCal??''}"></label></div>${r.res.maxHr?`<p class="muted">Пик пульса в тесте: ${r.res.maxHr}</p>`:''}`;
+  return f?`<section class="card"><div class="lbl">Результаты тестов</div>${f}</section>`:''; }
+function viewMitoSession(s){ if(s.v!==2) return viewMitoLegacy(s); const recs=s.recs||[], res=s.res||{}; const ws=recs.map(x=>x.w).filter(x=>x);
+  let b=UI.fresh===s.id?`<div class="banner"><div class="grow"><b>Тренировка сохранена.</b> ${s.type==='A'||s.type==='B'?(s.counted?'Засчитана в неделю протокола.':'Не засчитана в неделю.'):''}</div></div>`:'';
+  b+=`<p class="muted" style="font-size:14px">Неделя ${s.week}${s.deload?' (разгрузка)':''} · ${esc(s.desc||'')} · ${durTxt(s.end-s.start)}</p>`;
+  if(s.type==='T') b+=`<div class="tiles"><div class="tile"><b>${res.fixW?res.fixW:'—'}</b><span>Вт на пульсе ${res.fixHr||''}</span></div><div class="tile"><b>${res.rsaDec!=null?fmt(res.rsaDec,1)+'%':'—'}</b><span>падение в спринтах${res.rsaMean?', ср. '+res.rsaMean+' Вт':''}</span></div><div class="tile"><b>${res.maxW?res.maxW+' Вт':res.maxCal?res.maxCal+' ккал':'—'}</b><span>5 минут${res.maxHr?', пик '+res.maxHr:''}</span></div></div>`;
+  else if(s.type==='B') b+=`<div class="tiles"><div class="tile"><b>${durTxt(s.end-s.start)}</b><span>длительность</span></div><div class="tile"><b>${s.zonePct!=null?s.zonePct+'%':'—'}</b><span>времени в целевой зоне</span></div><div class="tile"><b>${s.hr?s.hr.avg:'—'}</b><span>средний пульс</span></div></div>`;
+  else b+=`<div class="tiles"><div class="tile"><b>${recs.length}</b><span>подходов</span></div><div class="tile"><b>${ws.length?Math.round(mAvg(ws)):'—'}</b><span>средние ватты</span></div><div class="tile"><b>${ws.length?Math.max(...ws):'—'}</b><span>лучшие ватты</span></div></div>`;
+  if(s.warnStop) b+=`<p class="warn">Пульс в паузе превысил ${s.hrStop}: ${s.warnStop}.</p>`;
+  if(s.hr) b+=hrCard(s.hr);
+  if(recs.length){ const hasB=recs.some(x=>x.burn);
+    b+=`<section class="card"><div class="lbl">Подходы</div><div class="tbl-wrap"><table><tr><th>№</th><th>Ватты</th><th>Пик пульса</th><th>Падение в паузе</th>${hasB?'<th>Жжение</th>':''}</tr>${recs.map(x=>`<tr><td>${x.test==='rsa'?x.n:x.se+'.'+x.n}</td><td class="num">${x.w??'—'}</td><td class="num">${x.peak??'—'}</td><td class="num">${x.drop!=null?x.drop+' за '+x.restSec+' с':'—'}</td>${hasB?`<td>${x.burn?'да':''}</td>`:''}</tr>`).join('')}</table></div><p class="muted" style="font-size:13px">Пульс на коротком подходе — только наблюдение: он отстаёт от нагрузки на 10–30 с.</p></section>`; }
+  b+=`<label class="field"><span>Заметка</span><textarea class="in" id="sessNote" data-f="sessNote">${esc(s.note||'')}</textarea></label><button class="btn ghost danger" data-a="sessDel">Удалить тренировку</button>`;
+  return {head:hdr(s.name,{back:true,sub:dfmt(s.start,{weekday:'long',day:'numeric',month:'long'})}),body:b}; }
+function viewMitoLegacy(s){ const sets=s.sets||[]; const P=s.plan||{};
+  let b=`<p class="muted" style="font-size:14px">Старый вариант протокола · неделя ${s.week} · ${P.series} × ${P.sets} · ${P.work}/${P.rest} с · ${durTxt(s.end-s.start)}</p>`;
+  if(s.hr) b+=hrCard(s.hr);
+  if(sets.length) b+=`<section class="card"><div class="lbl">Подходы</div><div class="tbl-wrap"><table><tr><th>№</th><th>Пик</th><th>Падение</th><th>Ватты</th></tr>${sets.map(x=>`<tr><td>${x.se}.${x.n}</td><td class="num">${x.peak??'—'}</td><td class="num">${x.drop??'—'}</td><td class="num">${x.w??''}</td></tr>`).join('')}</table></div></section>`;
+  b+=`<label class="field"><span>Заметка</span><textarea class="in" id="sessNote" data-f="sessNote">${esc(s.note||'')}</textarea></label><button class="btn ghost danger" data-a="sessDel">Удалить тренировку</button>`;
+  return {head:hdr(s.name,{back:true,sub:dfmt(s.start,{weekday:'long',day:'numeric',month:'long'})}),body:b}; }
+function viewMitoProf(){ const p=S.mito.profiles.find(x=>x.id===UI.id)||mp();
+  const nf=(k,l,v,ph,mode)=>`<label class="field"><span>${l}</span><input class="in" id="mp_${k}" data-f="mp" data-p="${p.id}" data-k="${k}" inputmode="${mode||'numeric'}" value="${v??''}" placeholder="${ph||''}"></label>`;
+  let b=`<section class="card">${nf('name','Имя',esc(p.name),'','text')}<div class="fgrid">${nf('age','Возраст, лет',p.age)}${nf('hrMax','ЧСС макс. по замеру',p.hrMax,'формула: '+Math.round(208-0.7*p.age))}</div>
+  <p class="muted" style="font-size:13px">Пусто — по формуле Танаки 208 − 0,7 × возраст. Ошибка формулы у конкретного человека ±10–20 ударов, поэтому лучше замер: тест 3 запишет его сам.</p></section>
+  <section class="card"><div class="lbl">Пульс</div><p>Зона 2: <b>${mPct(p,65)}–${mPct(p,75)}</b> · интервалы: <b>${mPct(p,85)}–${mPct(p,90)}</b> · тест на пульсе: <b>${mPct(p,70)}–${mPct(p,75)}</b></p>
+  <div class="fgrid">${nf('hrStop','Стоп-сигнал в конце паузы, % ЧСС макс.',p.hrStop)}${nf('pDrop','Конец серии при падении мощности, %',p.pDrop)}</div>
+  <p class="muted" style="font-size:13px">Если в конце паузы пульс выше ${mPct(p,p.hrStop)} — программа предложит закончить тренировку. Пульс на самом спринте не ограничивается: он отстаёт от нагрузки.</p>
+  <label class="check"><input type="checkbox" id="mp_byHr" data-f="mpc" data-p="${p.id}" data-k="byHr" ${p.byHr?'checked':''}> Дополнительно ждать, пока пульс опустится до ${mPct(p,p.recHi)}, перед подходом</label>
+  <p class="muted" style="font-size:13px">По исследованиям лучше фиксированный отдых по времени: с ожиданием по пульсу отдых плавает, и стимул меняется. Оставьте выключенным, если нет особых причин.</p></section>
+  <section class="card"><div class="lbl">Время</div><div class="fgrid">${nf('warm','Разминка, мин',fmt(p.warm/60,1),'','decimal')}${nf('cool','Заминка, мин',fmt(p.cool/60,1),'','decimal')}${nf('between','Между сериями, мин',fmt(p.between/60,1),'','decimal')}</div>
+  <p class="muted" style="font-size:13px">Подходы и отдых между ними — по неделям в таблице.</p></section>
+  <section class="card"><div class="lbl">Переход на следующую неделю</div><div class="seg"><button class="${p.mode==='count'?'on':''}" data-a="mMode" data-p="${p.id}" data-k="count">По числу тренировок</button><button class="${p.mode==='manual'?'on':''}" data-a="mMode" data-p="${p.id}" data-k="manual">Вручную</button></div>
+  ${p.mode==='count'?['nA','nB'].map(k=>`<div class="row"><div class="grow">${k==='nA'?'Спринт-сессий A в неделю':'Аэробных B в неделю'}</div><div class="stp" style="width:150px;height:44px"><button data-a="mN" data-p="${p.id}" data-k="${k}" data-d="-1" aria-label="Меньше">−</button><input readonly value="${p[k]}" style="font-size:19px" aria-label="${k}"><button data-a="mN" data-p="${p.id}" data-k="${k}" data-d="1" aria-label="Больше">+</button></div></div>`).join(''):''}
+  <p class="muted" style="font-size:13px">${p.age>=45?'Для 45+: 1 спринт-сессия и 1 аэробная, между спринтами 48–72 часа.':'До 45 лет можно 2 спринт-сессии и 1 аэробную, если нагрузка BJJ на неделе не тяжёлая.'}</p></section>
+  <button class="btn wide" data-a="go" data-v="mitoPlan" data-id="${p.id}">Таблица прогрессии</button>
+  <button class="btn wide" data-a="mPlanAge" data-p="${p.id}">Пересобрать таблицу под возраст ${p.age}</button>
+  ${S.mito.profiles.length>1?`<button class="btn ghost danger" data-a="mDelProf" data-p="${p.id}">Удалить профиль</button>`:''}`;
+  return {head:hdr(p.name||'Профиль',{back:true}),body:b}; }
+function viewMitoPlan(){ const p=S.mito.profiles.find(x=>x.id===UI.id)||mp();
+  const inp=(i,k,v,l)=>`<label class="field"><span>${l}</span><input class="in pin" id="pl_${k}_${i}" data-f="mpl" data-p="${p.id}" data-i="${i}" data-k="${k}" inputmode="numeric" value="${v}"></label>`;
+  const chk=(i,k,l,v)=>`<label class="check" style="min-height:36px;font-size:14px"><input type="checkbox" id="pl_${k}_${i}" data-f="mplc" data-p="${p.id}" data-i="${i}" data-k="${k}" ${v?'checked':''}> ${l}</label>`;
+  let b=p.plan.map((w,i)=>`<section class="card" style="gap:8px"><div class="row"><h3 class="grow">Неделя ${i+1}</h3><button class="ib" data-a="mplDel" data-p="${p.id}" data-i="${i}" aria-label="Удалить неделю">${IC.x}</button></div>
+    <div class="lbl">A · спринты</div><div class="plg">${inp(i,'a.series',w.a.series,'серии')}${inp(i,'a.sets',w.a.sets,'подходы')}${inp(i,'a.work',w.a.work,'работа, с')}${inp(i,'a.rest',w.a.rest,'отдых, с')}</div>
+    <div class="row"><div class="lbl grow">B · аэробная</div><div class="seg" style="width:210px"><button class="${w.b.type==='z2'?'on':''}" data-a="mplB" data-p="${p.id}" data-i="${i}" data-k="z2">Зона 2</button><button class="${w.b.type==='int'?'on':''}" data-a="mplB" data-p="${p.id}" data-i="${i}" data-k="int">4 × 4</button></div></div>
+    <div class="plg">${w.b.type==='z2'?inp(i,'b.min',w.b.min,'минут'):inp(i,'b.reps',w.b.reps,'интервалы')+inp(i,'b.work',w.b.work,'работа, мин')+inp(i,'b.rest',w.b.rest,'отдых, мин')}</div>
+    <div class="row wrap">${chk(i,'deload','разгрузка',w.deload)}${chk(i,'tests','тесты',w.tests)}${chk(i,'se','скор. выносл.',w.se)}</div></section>`).join('');
+  b+=`<div class="btns"><button class="btn outline" data-a="mplAdd" data-p="${p.id}">${IC.plus} Неделя</button><button class="btn" data-a="mPlanAge" data-p="${p.id}">Как в протоколе</button></div>
+  <p class="muted" style="font-size:14px">Растём объёмом: добавляются подходы и серии, отдых не сокращается. Длительность подхода — 8 с на первых неделях, 10 с с 5-й.</p>`;
+  return {head:hdr('Таблица · '+p.name,{back:true}),body:b}; }
+function mRowRight(s){ if(s.v===2&&(s.type==='B'||(s.type==='T'&&!(s.recs||[]).length))) return durTxt(s.end-s.start); const n=(s.v===2?s.recs:s.sets)||[]; return n.length+' '+plural(n.length,'подход','подхода','подходов'); }
+function viewMitoGuide(){ const p=mp(); const sec=(h,t)=>`<section class="card"><h3>${h}</h3>${t}</section>`;
+  const b=sec('Зачем это борцу','<p>Цель — больше митохондрий в мышцах: позже закисляетесь, дольше держите темп, быстрее восстанавливаетесь между взрывными действиями в схватке.</p>')
+  +sec('Что подтверждено наукой','<p>Короткие спринты с длинным отдыхом растят окислительные ферменты и митохондриальные белки — это показано в рандомизированных исследованиях с биопсией. Но почти все они — с усилием на максимум. Для количества митохондрий важен и общий объём работы, поэтому в протоколе есть аэробная сессия.</p><p>Идея Селуянова, что закисление «разрушает митохондрии», в сильной форме не подтверждена: закисляющие 30-секундные спринты тоже растят митохондрии. Разумное ядро остаётся — не перегружаться и давать длинный отдых.</p>')
+  +sec('Сессия A · спринты','<p><b>8–10 с почти на максимум</b> (RPE 9–10), руки и ноги. Отдых <b>фиксированный</b>, 60–90 с лёгкого кручения. Между сериями 5 минут.</p><p>Серия заканчивается, когда мощность упала больше чем на 15% от лучшего подхода серии — впишите ватты с экрана аэробайка, программа подскажет. Если жжёт уже к 10-й секунде — сократите подход до 8 с, а не снижайте мощность.</p>')
+  +sec('Сессия B · аэробная',`<p>Зона 2 (${mPct(p,65)}–${mPct(p,75)}): ровно, можно говорить фразами. На 5-й и 7-й неделе — интервалы 4 × 4 мин на ${mPct(p,85)}–${mPct(p,90)}, отдых 3 мин. Программа даёт сигнал, если пульс вышел из коридора.</p>`)
+  +sec('Пульс',`<p>ЧСС макс. по формуле Танаки 208 − 0,7 × возраст, для ${p.age} лет — ${Math.round(208-0.7*p.age)}. Ошибка у конкретного человека ±10–20 ударов, поэтому лучше замер в тесте 3.</p><p>На 10-секундном спринте пульс не ограничивается: он отстаёт от нагрузки на 10–30 с. Стоп-сигнал: если к концу паузы пульс выше 80% максимума — тренировку лучше закончить.</p>`)
+  +sec('Тесты: неделя 0, 4 и 8','<p>1. 10 минут на пульсе 70–75% — средние ватты за последние 5 минут. 2. 8 спринтов по 8 с со стартом каждую минуту — падение мощности. 3. 5 минут на максимум — ватты или калории и реальный пик пульса.</p><p>Растут ватты на том же пульсе, падение мощности уменьшается — адаптация идёт.</p>')
+  +sec('С BJJ',`<p>Не ставить спринты в день тяжёлых спаррингов. ${p.age>=45?'В 45+ — 1 спринт-сессия и 1 аэробная в неделю, между спринтами 48–72 часа.':'До 45 лет — до 2 спринт-сессий и 1 аэробной, если неделя BJJ не тяжёлая.'} Скоростная выносливость 4 × 20 с с 6-й недели — по желанию и только при лёгкой неделе BJJ.</p>`)
+  +sec('Безопасность','<p>Перед циклом в 40+ — ЭКГ, при факторах риска (давление, холестерин, курение, диабет, ранние инфаркты у родных) — нагрузочный тест. Немедленно остановиться: боль или давление в груди, необычная одышка, головокружение, перебои. Не задерживать дыхание на спринте. Не тренироваться больным, после бессонной ночи, в жару без адаптации. Беречь плечи: разминка с 2–3 разгонами.</p>');
+  return {head:hdr('Руководство',{back:true,sub:'митохондрии на аэробайке'}),body:b}; }
 
 /* ---------- rest timer ---------- */
 function restAfter(ei,si){ const e=ACT.entries[ei], s=e.sets[si], nx=e.sets[si+1], st=S.settings, ex=exById(e.exId);
@@ -702,7 +954,7 @@ function heatmap(sessions){
 
 /* ---------- navigation ---------- */
 function setTab(t){ UI.fresh=null; UI.tab=t; UI.view=null; UI.id=null; UI.stack=[]; render(); window.scrollTo(0,0); }
-function go(v,id,extra){ if(v==='cardio'){ wakeOn(); audio(); } UI.stack.push({view:UI.view,id:UI.id}); UI.view=v; UI.id=id??null; Object.assign(UI,extra||{}); render(); window.scrollTo(0,0); }
+function go(v,id,extra){ if(v==='cardio'||v==='mito'){ wakeOn(); audio(); } UI.stack.push({view:UI.view,id:UI.id}); UI.view=v; UI.id=id??null; Object.assign(UI,extra||{}); render(); window.scrollTo(0,0); }
 function back(){ const p=UI.stack.pop()||{view:null,id:null}; UI.view=p.view; UI.id=p.id; render(); }
 function hdr(title,o={}){ return `<div class="hd">${o.back?`<button class="ib" data-a="back" aria-label="Назад">${IC.back}</button>`:''}<div class="hd-t"><h1>${esc(title)}</h1>${o.sub?`<div class="hd-sub">${o.sub}</div>`:''}</div>${o.right||''}</div>`; }
 function renderNav(){ const T=[['train','Тренировка'],['hist','История'],['stats','Прогресс'],['body','Тело'],['more','Ещё']];
@@ -728,6 +980,7 @@ function viewHome(){
   let b='';
   if(S.hint) b+=`<div class="banner"><div class="grow">Залы, блины и шаблоны заполнены примером. Проверьте инвентарь в разделе «Ещё → Залы»: от него зависит подбор блинов.</div><button class="ib" data-a="hintClose" aria-label="Скрыть">${IC.x}</button></div>`;
   b+=backupBanner();
+  if(MITO.run) b+=`<button class="banner" style="border:0;width:100%;text-align:left" data-a="go" data-v="mito"><div class="grow"><b>Идёт тренировка по протоколу митохондрий.</b> Вернуться</div></button>`;
   b+=`<label class="field"><span>Зал</span><select class="in" id="gymSel" data-f="gym">${S.gyms.map(g=>`<option value="${g.id}" ${g.id===gym.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>`;
   if(nt){ const ld=lastDone(nt.id);
     b+=`<section class="next"><div><div class="lbl">Следующая по очереди</div><h2>${esc(nt.name)}</h2>${ld?`<div class="muted" style="font-size:14px">Последний раз ${dfmt(ld,{day:'numeric',month:'long'})}</div>`:''}</div>
@@ -775,7 +1028,7 @@ function viewHist(){ const f=fin().reverse();
   if(!f.length) return {head:hdr('История'),body:`<div class="card empty"><h3>Пока пусто</h3><p>Здесь появятся завершённые тренировки.</p><button class="btn primary" data-a="tab" data-t="train">К тренировке</button></div>`};
   let b='', cur='';
   f.forEach(s=>{ const m=new Date(s.start).toLocaleDateString('ru-RU',{month:'long',year:'numeric'}); if(m!==cur){ if(cur) b+='</div></section>'; cur=m; b+=`<section class="card"><div class="lbl">${m}</div><div class="list">`; }
-    b+=`<button class="li" data-a="go" data-v="session" data-id="${s.id}"><div class="grow"><div class="t">${esc(s.name)}</div><div class="s">${dfmt(s.start,{weekday:'short',day:'numeric',month:'short'})} · ${esc(s.gymName||'')} · ${durTxt(s.end-s.start)}</div></div><div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600">${s.kind==='cardio'?((s.sprints||[]).length+' '+plural((s.sprints||[]).length,'рывок','рывка','рывков')):ton(sessTon(s))}</div>${s.prs&&s.prs.length?`<span class="badge good">${s.prs.length} ${plural(s.prs.length,'рекорд','рекорда','рекордов')}</span>`:''}</div></button>`; });
+    b+=`<button class="li" data-a="go" data-v="session" data-id="${s.id}"><div class="grow"><div class="t">${esc(s.name)}</div><div class="s">${dfmt(s.start,{weekday:'short',day:'numeric',month:'short'})} · ${esc(s.gymName||'')} · ${durTxt(s.end-s.start)}</div></div><div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600">${s.kind==='cardio'?((s.sprints||[]).length+' '+plural((s.sprints||[]).length,'рывок','рывка','рывков')):s.kind==='mito'?mRowRight(s):ton(sessTon(s))}</div>${s.prs&&s.prs.length?`<span class="badge good">${s.prs.length} ${plural(s.prs.length,'рекорд','рекорда','рекордов')}</span>`:''}</div></button>`; });
   b+='</div></section>';
   return {head:hdr('История',{sub:`${f.length} ${plural(f.length,'тренировка','тренировки','тренировок')}`}),body:b};
 }
@@ -793,6 +1046,7 @@ function viewCardioSession(s){ const sp=s.sprints||[]; const recs=sp.filter(x=>x
   return {head:hdr(s.name,{back:true,sub:dfmt(s.start,{weekday:'long',day:'numeric',month:'long'})}),body:b}; }
 function viewSession(){ const s=SESS.find(x=>x.id===UI.id); if(!s||s.del){ UI.view=null; return TABS[UI.tab](); }
   if(s.kind==='cardio') return viewCardioSession(s);
+  if(s.kind==='mito') return viewMitoSession(s);
   const tot=sessTon(s), wt=sessTon(s,true), nSets=s.entries.reduce((a,e)=>a+e.sets.length,0);
   let b='';
   if(UI.fresh===s.id) b+=`<div class="banner"><div class="grow"><b>Тренировка сохранена.</b> Следующая по очереди: ${esc((nextTpl()||{}).name||'—')}.</div></div>`+backupBanner();
@@ -867,6 +1121,7 @@ function viewMore(){
     ${R('exList','Упражнения',`${S.exercises.length} в каталоге`)}
     ${R('tplList','Шаблоны и очередь',S.templates.map(t=>t.name).join(', ')||'нет шаблонов')}
     ${R('gymList','Залы, грифы и блины',S.gyms.map(g=>g.name).join(', ')||'нет залов')}
+    ${R('mito','Митохондрии','протокол на аэробайке, профили, таблица недель')}
     ${R('cardio','Аэробайк и пульс','монитор пульса со звуковыми границами')}
     ${R('calc','Калькулятор блинов','какие блины надеть на гриф')}
     ${R('settings','Настройки','схема подходов, таймер, сигналы, тема')}
@@ -1023,7 +1278,7 @@ function viewHelp(){ return {head:hdr('Как пользоваться',{back:tr
   <section class="card"><h3>Как идёт прогрессия</h3><p>Отметьте подход галочкой — запустится отдых. Вес и повторы меняйте кнопками ± или впишите вручную. Плюс и минус переходят к следующему весу, который можно собрать из ваших блинов. Если изменить вес первого рабочего подхода, второй и разминка пересчитаются сами. Чтобы удалить подход, нажмите на его номер слева.</p><p>Вес можно задать заранее, отдельно для каждого шаблона: на главном экране нажмите на упражнение в карточке следующей тренировки или на название другого шаблона.</p><p>Когда оба рабочих подхода сделаны по ${S.settings.repMax}, на следующей тренировке программа даст новый вес на ${S.settings.repMin} повторений.</p></section>
   <section class="card"><h3>Где хранятся данные</h3><p>Только в памяти телефона, никуда не отправляются. Если удалить приложение или очистить данные Chrome, записи пропадут, поэтому сохраняйте копию на Яндекс Диск: «Ещё → Резервная копия → Отправить на Яндекс Диск». Восстановить можно на любом телефоне.</p></section>`}; }
 const TABS={train:()=>ACT?viewWorkout():viewHome(),hist:viewHist,stats:viewStats,body:viewBody,more:viewMore};
-const VIEWS={cardio:viewCardio,session:viewSession,exStat:viewExStat,exList:viewExList,exEdit:viewExEdit,tplList:viewTplList,tplEdit:viewTplEdit,gymList:viewGymList,gymEdit:viewGymEdit,calc:viewCalc,settings:viewSettings,backup:viewBackup,help:viewHelp};
+const VIEWS={mitoGuide:viewMitoGuide,mito:viewMito,mitoProf:viewMitoProf,mitoPlan:viewMitoPlan,cardio:viewCardio,session:viewSession,exStat:viewExStat,exList:viewExList,exEdit:viewExEdit,tplList:viewTplList,tplEdit:viewTplEdit,gymList:viewGymList,gymEdit:viewGymEdit,calc:viewCalc,settings:viewSettings,backup:viewBackup,help:viewHelp};
 
 /* ---------- picker ---------- */
 function openPicker(title,cb){ SHEET={}; const st={sel:[],cb,q:'',g:''}; openSheet(`<div class="sheet-h"><h2>${esc(title)}</h2><button class="btn primary sm" data-a="pickDone">Добавить</button></div><input class="in" id="pickQ" data-in="pickQ" placeholder="Поиск"><div class="chips" id="pickG"></div><div class="list" id="pickList"></div>`,st); renderPick(); }
@@ -1165,6 +1420,31 @@ const A={
     const s={id:r.id,kind:'cardio',start:r.start,end:Date.now(),gymId:S.gymId,gymName:gymOf(S.gymId).name,tplId:null,name:cs().name,note:'',entries:[],prs:[],hr:h||undefined,sprints:r.sp,thr:{hi:cs().hi,lo:cs().lo}};
     SESS.push(s); saveSession(s); CAR.rec=null; CAR.tm=null; flush(); if(!ACT) wakeOff(); UI.tab='hist'; UI.view='session'; UI.id=s.id; UI.stack=[]; UI.fresh=s.id; render(); window.scrollTo(0,0); },
   cCancel:()=>confirmSheet('Отменить тренировку?','Время и пульс этой тренировки не сохранятся.','Отменить тренировку',()=>{ CAR.rec=null; CAR.tm=null; flush(); render(); },true),
+  mProf:el=>{ S.mito.active=el.dataset.id; saveState(); render(); },
+  mNew:()=>{ const p=defProfile('Профиль '+(S.mito.profiles.length+1),30); S.mito.profiles.push(p); S.mito.active=p.id; saveState(); go('mitoProf',p.id); },
+  mWeek:el=>{ const p=mp(); p.week=+el.dataset.i; p.doneA=0; p.doneB=0; saveState(); render(); },
+  mNewCycle:()=>{ const p=mp(); p.week=1; p.doneA=0; p.doneB=0; saveState(); render(); },
+  mStart:el=>mStartRun(el.dataset.t),
+  mTests:()=>mTestSheet(),
+  mTestGo:()=>{ const o={fix:$('#tFix').checked,rsa:$('#tRsa').checked,max:$('#tMax').checked}; if(!o.fix&&!o.rsa&&!o.max){ toast('Выберите хотя бы один тест'); return; } mStartRun('T',o); },
+  mPause:()=>{ const r=MITO.run; if(!r||r.done) return; const now=Date.now(); r.paused=r.tr?(r.tr.k==='wait'?0:Math.max(0,r.tr.end-now)):Math.max(0,r.t1-now); persist(); render(); },
+  mResume:()=>{ const r=MITO.run; if(!r) return; const now=Date.now(); if(r.tr){ if(r.tr.k==='wait') r.tr.start=now; else r.tr.end=now+r.paused; } else r.t1=now+r.paused; r.paused=null; r.lastTick=null; persist(); render(); },
+  mSkip:()=>{ const r=MITO.run; if(!r||r.done) return; r.paused=null; if(r.tr){ if(r.tr.k==='wait') r.waitAcc=Math.round((Date.now()-r.tr.start)/1000); mEnter(r.idx+1); return; } const s=mStep(); if(s&&(s.ph==='work'||s.ph==='steady')) mEndStep(); else mEnter(r.idx+1); },
+  mMute:()=>{ MITO.run.muted=!MITO.run.muted; persist(); render(); },
+  mW:el=>{ const r=MITO.run, ls=[...r.recs].reverse().find(s=>s.endT); if(!ls) return; const prev=[...r.recs].reverse().find(s=>s.w!=null); ls.w=Math.max(0,ls.w!=null?ls.w+(+el.dataset.d):(prev?prev.w:400)); persist(); render(); },
+  mBurn:()=>{ const r=MITO.run, ls=[...r.recs].reverse().find(s=>s.endT); if(ls){ ls.burn=!ls.burn; persist(); render(); } },
+  mEndSeries:()=>mEndSeries(),
+  mSetMax:()=>{ const r=MITO.run, p=S.mito.profiles.find(x=>x.id===r.pid); if(p&&r.res.maxHr){ p.hrMax=r.res.maxHr; saveState(); toast('ЧСС макс. обновлена: '+r.res.maxHr); render(); } },
+  mFinish:()=>mFinishSheet(),
+  mSave:el=>mSave(el.dataset.c==='1'),
+  mDiscard:()=>{ closeSheet(); confirmSheet('Не сохранять тренировку?','Пульс и подходы этой тренировки будут удалены.','Не сохранять',()=>{ MITO.run=null; flush(); if(!ACT) wakeOff(); render(); },true); },
+  mMode:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); p.mode=el.dataset.k; saveState(); render(); },
+  mN:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p), k=el.dataset.k; p[k]=Math.max(k==='nA'?1:0,Math.min(4,p[k]+(+el.dataset.d))); saveState(); render(); },
+  mDelProf:el=>{ const id=el.dataset.p, p=S.mito.profiles.find(x=>x.id===id); confirmSheet('Удалить профиль?',`Профиль «${esc(p.name)}» и его настройки будут удалены. Сохранённые тренировки останутся в истории.`,'Удалить',()=>{ S.mito.profiles=S.mito.profiles.filter(x=>x.id!==id); if(S.mito.active===id) S.mito.active=S.mito.profiles[0].id; saveState(); back(); },true); },
+  mplAdd:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); const l=p.plan[p.plan.length-1]||defPlan(p.age)[0]; p.plan.push({...clone(l),deload:false,tests:false}); saveState(); render(); },
+  mplDel:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); if(p.plan.length<=1){ toast('Нужна хотя бы одна неделя'); return; } p.plan.splice(+el.dataset.i,1); p.week=Math.min(p.week,p.plan.length+1); saveState(); render(); },
+  mplB:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); p.plan[+el.dataset.i].b.type=el.dataset.k; saveState(); render(); },
+  mPlanAge:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); confirmSheet('Пересобрать таблицу?',`Таблица будет заменена исходными 8 неделями протокола для возраста ${p.age} (отдых ${p.age>=45?'75 и 90':'60 и 75'} с). Ваши правки в таблице пропадут.`,'Пересобрать',()=>{ p.plan=defPlan(p.age); p.week=Math.min(p.week,p.plan.length+1); saveState(); render(); }); },
   cSet:el=>{ UI.calc.w=+el.dataset.w; render(); },
   setOpt:el=>{ S.settings[el.dataset.k]=el.dataset.v; if(el.dataset.k==='theme') applyTheme(); saveState(); render(); if(el.dataset.k==='signal'){ audio(); signal('end'); } },
   setNum:el=>{ const k=el.dataset.k, st=S.settings; st[k]=Math.min(+el.dataset.max,Math.max(+el.dataset.min,(+st[k]||0)+(+el.dataset.d))); if(st.repMax<=st.repMin) st.repMax=st.repMin+1; saveState(); render(); },
@@ -1198,6 +1478,23 @@ const F={
   sHrRest:el=>{ const v=num(el.value); S.settings.hrRest=v&&v>40&&v<200?Math.round(v):0; saveState(); },
   cThrIn:el=>{ const v=num(el.value); if(v&&v>=40&&v<=230){ const c=cs(); c[el.dataset.k]=Math.round(v); if(c.lo>=c.hi){ if(el.dataset.k==='hi') c.lo=c.hi-5; else c.hi=c.lo+5; } cardioReset(); saveState(); } render(); },
   cVib:el=>{ cs().vib=el.checked; saveState(); },
+  mp:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p), k=el.dataset.k;
+    if(k==='name'){ const v=el.value.trim(); if(v) p.name=v; }
+    else { const v=num(el.value);
+      if(k==='hrMax') p.hrMax=v&&v>=100&&v<=230?Math.round(v):null;
+      else if(k==='age'){ if(v&&v>=8&&v<=90) p.age=Math.round(v); }
+      else if(k==='hrStop'){ if(v&&v>=60&&v<=95) p.hrStop=Math.round(v); }
+      else if(k==='pDrop'){ if(v&&v>=5&&v<=40) p.pDrop=Math.round(v); }
+      else if(['between','warm','cool'].includes(k)){ if(v!=null&&v>=0&&v<=60) p[k]=Math.round(v*60); } }
+    saveState(); render(); },
+  mpc:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); p[el.dataset.k]=el.checked; saveState(); render(); },
+  mpl:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p), w=p.plan[+el.dataset.i], [g,k]=el.dataset.k.split('.'); const v=num(el.value);
+    const lim={'a.series':[1,8],'a.sets':[1,20],'a.work':[4,30],'a.rest':[20,300],'b.min':[10,120],'b.reps':[1,8],'b.work':[1,10],'b.rest':[1,10]}[el.dataset.k];
+    if(v!=null&&v>=lim[0]&&v<=lim[1]) w[g][k]=Math.round(v); saveState(); render(); },
+  mplc:el=>{ const p=S.mito.profiles.find(x=>x.id===el.dataset.p); p.plan[+el.dataset.i][el.dataset.k]=el.checked; saveState(); },
+  mWin:el=>{ const r=MITO.run, ls=r&&[...r.recs].reverse().find(s=>s.endT); if(!ls) return; const v=num(el.value); ls.w=v!=null&&v>=0?Math.round(v):null; persist(); render(); },
+  mWi:el=>{ const r=MITO.run, x=r&&r.recs[+el.dataset.i]; if(!x) return; const v=num(el.value); x.w=v!=null&&v>=0?Math.round(v):null; persist(); },
+  mRes:el=>{ const r=MITO.run; if(!r) return; const v=num(el.value); r.res[el.dataset.k]=v!=null&&v>=0?Math.round(v):null; persist(); },
   cM:el=>{ UI.calc.m=+el.value; render(); },
   gDbF:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.db.fixed=el.value; saveState(); render(); },
   cGym:el=>{ UI.calc.gymId=el.value; UI.calc.bar=0; render(); },
@@ -1246,7 +1543,7 @@ $('#importFile').addEventListener('change',ev=>{ const f=ev.target.files[0]; ev.
 (async function boot(){
   IDB=await idbOpen();
   let loaded=false;
-  if(IDB){ const st=await idbGet('S'); if(st){ S=migrate(st); SESS=(await idbGet('SESS'))||[]; ACT=(await idbGet('ACT'))||null; { const cd=(await idbGet('CARDIO'))||null; if(cd&&cd.start){ CAR.rec=cd; } else if(cd){ CAR.rec=cd.rec||null; CAR.tm=cd.tm||null; } } loaded=true; } }
+  if(IDB){ const st=await idbGet('S'); if(st){ S=migrate(st); SESS=(await idbGet('SESS'))||[]; ACT=(await idbGet('ACT'))||null; { const cd=(await idbGet('CARDIO'))||null; if(cd&&cd.start){ CAR.rec=cd; } else if(cd){ CAR.rec=cd.rec||null; CAR.tm=cd.tm||null; } } { const mr=(await idbGet('MITO'))||null; MITO.run=mr&&mr.v===2?mr:null; const r=MITO.run; if(r&&!r.done&&r.paused==null) r.paused=r.tr?(r.tr.k==='wait'?0:Math.max(0,r.tr.end-Date.now())):Math.max(0,r.t1-Date.now()); } loaded=true; } }
   if(!loaded){ const L=lsGet(); if(L&&L.S){ S=migrate(L.S); SESS=L.SESS||[]; ACT=L.ACT||null; } flush(); }
   applyTheme(); render(); setInterval(tick,250);
   if(ACT) wakeOn();
