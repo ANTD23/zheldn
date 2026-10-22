@@ -118,6 +118,7 @@ select.in{appearance:auto}
 .plan-l>.prow:active{background:var(--surface2)}
 .plan-l>div{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:15px}
 .plan-l>div:last-child{border-bottom:0}
+.plan-l>div>span{min-width:0}.plan-l>div>b{white-space:normal;text-align:right;min-width:0}
 .plan-l b{font-family:var(--f-num);font-size:18px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
 .arrow-up{color:var(--good)} .arrow-down{color:var(--bad)}
 
@@ -695,11 +696,23 @@ function mDropPct(){ const r=MITO.run; if(r.type!=='A') return null; const ls=[.
 function mSeriesLeft(){ const r=MITO.run; for(let j=r.idx;j<r.steps.length;j++){ const s=r.steps[j]; if(s.ph==='between'||s.ph==='cool') return false; if(s.ph==='work') return true; } return false; }
 function mEndSeries(){ const r=MITO.run; let j=r.idx; while(j<r.steps.length&&r.steps[j].ph!=='between'&&r.steps[j].ph!=='cool') j++; r.paused=null; mEnter(j); }
 
+function mTests(pid){ return fin().filter(s=>s.kind==='mito'&&s.v===2&&s.type==='T'&&s.profileId===pid); }
+function mTargets(p){ const T=mTests(p.id).reverse(); const rs=T.find(s=>s.res&&s.res.rsaBest), fx=T.find(s=>s.res&&s.res.fixW);
+  return {sprintW:rs?Math.round(rs.res.rsaBest*0.9):null,rsaBest:rs?rs.res.rsaBest:null,rsaDate:rs?rs.start:null,z2W:fx?fx.res.fixW:null,z2Hr:fx?fx.res.fixHr:null,z2Date:fx?fx.start:null}; }
+function mCompare(a,b){ // a = earlier test, b = later; returns {cmp:n, better:[...], worse:[...]}
+  const A=a.res||{}, B=b.res||{}, out={cmp:0,better:[],same:[]};
+  const chk=(name,x,y,up,th)=>{ if(x==null||y==null) return; out.cmp++; const d=up?(y-x)/x*100:(x-y); if(d>=th) out.better.push(name); else out.same.push(name); };
+  chk('ватты на пульсе',A.fixW,B.fixW,true,2); chk('падение мощности в спринтах',A.rsaDec,B.rsaDec,false,1); chk('средние ватты в спринтах',A.rsaMean,B.rsaMean,true,2);
+  chk('5 минут (ватты)',A.maxW,B.maxW,true,2); chk('5 минут (калории)',A.maxCal,B.maxCal,true,2); return out; }
+function mAdvice(p){ const T=mTests(p.id); if(T.length<2) return null; const last=T[T.length-1], prev=T[T.length-2];
+  if(last.advice||Date.now()-last.start>21*864e5) return null; const c=mCompare(prev,last); if(!c.cmp||c.better.length) return null;
+  const P=p.plan, wk=last.week; const rep=wk>1&&wk<P.length?wk-1:null; return {s:last,rep,end:wk>=P.length}; }
 function mStartRun(type,opts){ const p=mp(); const wi=Math.min(p.week,p.plan.length), w=p.plan[wi-1]; if(!w){ toast('В таблице нет недель'); return; }
   audio(); wakeOn(); hrAuto(); closeSheet();
   const desc=type==='A'?`${w.a.series} × ${w.a.sets} × ${w.a.work} с, отдых ${w.a.rest} с`:type==='B'?(w.b.type==='z2'?`Зона 2 · ${w.b.min} мин`:`${w.b.reps} × ${w.b.work} мин на 85–90%, отдых ${w.b.rest} мин`):type==='SE'?'4 × 20 с, отдых 3:30':'Тесты';
-  MITO.run={v:2,id:uid(),pid:p.id,pname:p.name,type,week:wi,deload:!!w.deload,desc,start:Date.now(),steps:mBuild(p,type,w,opts),idx:0,recs:[],s:[],res:{},
-    hrMax:mHrMax(p),hrStop:mPct(p,p.hrStop),recHi:mPct(p,p.recHi),byHr:p.byHr,pDrop:p.pDrop,muted:false,paused:null,tr:null,waitAcc:0};
+  const TG=mTargets(p);
+  MITO.run={v:2,id:uid(),pid:p.id,pname:p.name,type,week:wi,deload:!!w.deload,desc,start:Date.now(),steps:mBuild(p,type,w,opts).map(st=>{ if(st.ph==='work'&&!st.test&&type==='A'&&TG.sprintW) st.hint=`Почти максимум · цель ≥ ${TG.sprintW} Вт`; if(st.ph==='steady'&&st.lbl==='Зона 2'&&TG.z2W) st.hint=`Ровно · ориентир ≈ ${TG.z2W} Вт`; return st; }),idx:0,recs:[],s:[],res:{},
+    tg:mTargets(p),hrMax:mHrMax(p),hrStop:mPct(p,p.hrStop),recHi:mPct(p,p.recHi),byHr:p.byHr,pDrop:p.pDrop,muted:false,paused:null,tr:null,waitAcc:0};
   mEnter(0); UI.view='mito'; render(); window.scrollTo(0,0); }
 function mSave(counted){ const r=MITO.run; if(!r) return; const p=S.mito.profiles.find(x=>x.id===r.pid);
   const recs=r.recs.filter(x=>x.endT).map(x=>{ const {startMs,endT,...o}=x; if(o.hrRest===-1) o.hrRest=null; return o; });
@@ -729,6 +742,10 @@ function viewMito(){ if(MITO.run) return viewMitoRun();
   const p=mp(), P=p.plan, w=mWeekState(p), hist=fin().filter(s=>s.kind==='mito'&&s.profileId===p.id), tests=hist.filter(s=>s.type==='T');
   let b=`<div class="chips">${S.mito.profiles.map(x=>`<button class="chip ${x.id===p.id?'on':''}" data-a="mProf" data-id="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip" data-a="mNew">+ Профиль</button></div>`;
   b+=`<section class="card"><div class="row"><div class="grow"><div class="lbl">${esc(p.name)} · ${p.age} ${plural(p.age,'год','года','лет')}</div><div style="font-weight:600">ЧСС макс. ${mHrMax(p)} ${p.hrMax?'<span class="badge good">замер</span>':'<span class="badge">формула ±10</span>'}</div><div class="muted" style="font-size:14px">Зона 2: ${mPct(p,65)}–${mPct(p,75)} · интервалы ${mPct(p,85)}–${mPct(p,90)} · стоп в паузе > ${mPct(p,p.hrStop)}</div></div><button class="btn sm" data-a="go" data-v="mitoProf" data-id="${p.id}">Изменить</button></div></section>`;
+  const tg=mTargets(p), adv=mAdvice(p);
+  if(adv) b+=`<section class="card" style="background:var(--bad-soft)"><div class="lbl">Подсказка по объёму</div><p>Тесты ${dfmt(adv.s.start,{day:'numeric',month:'long'})} не лучше предыдущих.${adv.rep?` Рекомендуем не повышать объём, а повторить <b>неделю ${adv.rep}</b>.`:''} Сначала проверьте сон и нагрузку BJJ.${adv.end?' Цикл закончен: перед новым добавьте аэробный объём, а не спринты.':''}</p>
+    <div class="btns">${adv.rep?`<button class="btn primary" data-a="mAdvRep" data-id="${adv.s.id}" data-w="${adv.rep}">Повторить неделю ${adv.rep}</button>`:''}<button class="btn" data-a="mAdvKeep" data-id="${adv.s.id}">${adv.rep?'Идти дальше':'Понятно'}</button></div></section>`;
+  if(tg.sprintW||tg.z2W) b+=`<section class="card"><div class="lbl">Уровни из тестов</div><div class="plan-l">${tg.sprintW?`<div><span>Спринты A: не ниже</span><b>${tg.sprintW} Вт</b></div>`:''}${tg.z2W?`<div><span>Зона 2: ориентир</span><b>≈ ${tg.z2W} Вт${tg.z2Hr?' при '+tg.z2Hr:''}</b></div>`:''}</div><p class="muted" style="font-size:13px">Спринты — 90% от лучшего спринта в тесте 2, зона 2 — ватты из теста 1. Обновляются после каждого теста. Главным для зоны 2 остаётся пульс.</p></section>`;
   if(!tests.length) b+=`<div class="banner"><div class="grow"><b>Начните с тестов (неделя 0).</b> Без них не видно, растёт ли результат. Тест 3 заодно покажет ваш реальный максимальный пульс.</div><button class="btn primary sm" data-a="mTests">Тесты</button></div>`;
   if(!w) b+=`<section class="next"><div><div class="lbl">Протокол</div><h2>Цикл завершён</h2><p class="muted" style="font-size:14px">Если тесты улучшились — поддержка: 1 спринт-сессия и 1 аэробная в неделю. Если нет — сначала сон и нагрузка BJJ, потом больше аэробного объёма.</p></div><div class="btns"><button class="btn" data-a="mStart" data-t="A">Спринты</button><button class="btn" data-a="mStart" data-t="B">Аэробная</button></div><button class="btn primary wide" data-a="mNewCycle">Начать новый цикл</button></section>`;
   else { const ok=(n,need)=>p.mode==='count'?`<span class="badge ${n>=need?'good':''}">${n} из ${need}</span>`:'';
@@ -756,7 +773,7 @@ function viewMitoRun(){ const r=MITO.run, s=mStep(), nx=r.steps[r.idx+1], ls=[..
   const lbl=r.done?'Тренировка завершена':r.tr?(r.tr.k==='wait'?`Ждём пульс ≤ ${r.recHi}`:'Приготовиться'):s.lbl;
   const hint=r.done||r.tr?'':s.ph==='steady'&&s.zone?`Держите пульс ${s.zone[0]}–${s.zone[1]}${r.zs&&r.zs.out==='hi'?' · снизьте темп':r.zs&&r.zs.out==='lo'?' · прибавьте':''}`:(s.hint||'');
   let b=`<div class="mph ${cls}"><div class="mlbl">${esc(lbl)}${r.paused!=null?' · пауза':''}</div>${hint?`<div class="mhint">${esc(hint)}</div>`:''}<div class="mbig num" id="mBig">${mBigTxt()}</div><div class="mprog">${mProgTxt()}</div></div>`;
-  const zoneTile=s&&s.ph==='steady'&&s.zone?`<div><span>Цель</span><b class="num">${s.zone[0]}–${s.zone[1]}</b></div>`:`<div><span>Стоп в паузе</span><b class="num">&gt; ${r.hrStop}</b></div>`;
+  const zoneTile=s&&s.ph==='steady'&&s.zone?`<div><span>Цель${s.lbl==='Зона 2'&&r.tg&&r.tg.z2W?' · ≈'+r.tg.z2W+' Вт':''}</span><b class="num">${s.zone[0]}–${s.zone[1]}</b></div>`:`<div><span>Стоп в паузе</span><b class="num">&gt; ${r.hrStop}</b></div>`;
   b+=`<div class="mhr"><div><span>Пульс</span><b class="num" id="mHrv" style="color:${mHrColor()}">${hrFresh()?HR.bpm:'—'}</b></div>${zoneTile}<div><span>ЧСС макс.</span><b class="num">${r.hrMax}</b></div></div>`;
   if(HR.state!=='on') b+=`<button class="btn wide" data-a="hrConnect">♥ Подключить Polar H9</button>`;
   if(r.recs.length) b+=`<div class="last" id="mLast" style="padding:0 4px">${mLastTxt()}</div>`;
@@ -772,8 +789,8 @@ function viewMitoRun(){ const r=MITO.run, s=mStep(), nx=r.steps[r.idx+1], ls=[..
     if(r.res.maxHr&&p&&r.res.maxHr>(p.hrMax||0)&&r.res.maxHr!==mHrMax(p)) b+=`<div class="banner"><div class="grow">Пик пульса в тесте 5 минут: <b>${r.res.maxHr}</b>. Сейчас в профиле ${mHrMax(p)}${p.hrMax?'':' по формуле'}. Записывайте, если выложились в тесте полностью.</div><button class="btn primary sm" data-a="mSetMax">Записать ${r.res.maxHr}</button></div>`;
     b+=`<div class="stack">${r.type==='A'||r.type==='B'?'<button class="btn primary big wide" data-a="mSave" data-c="1">Сохранить и засчитать</button><button class="btn wide" data-a="mSave" data-c="0">Сохранить без зачёта</button>':'<button class="btn primary big wide" data-a="mSave" data-c="1">Сохранить</button>'}<button class="btn ghost danger" data-a="mDiscard">Не сохранять</button></div>`; }
   return {head:hdr(r.pname,{sub:`<span>${MTYPES[r.type]} · неделя ${r.week}</span><span id="mTot" class="num">${fmtDur(r.done?r.doneAt:Date.now()-r.start)}</span>`,right:r.done?'':'<button class="btn primary sm" data-a="mFinish">Завершить</button>'}),body:b}; }
-function mRecCard(ls,r){ return `<section class="card"><div class="lbl">${ls.test==='rsa'?'Спринт '+ls.n:'Подход '+ls.se+'.'+ls.n} · ватты с экрана аэробайка</div>
-  <div class="row"><div class="grow">Ватты ${ls.test==='rsa'?'':'<span class="muted">(по желанию)</span>'}</div><div class="stp" style="width:170px;height:48px"><button data-a="mW" data-d="-10" aria-label="Меньше">−</button><input id="mWin" data-f="mWin" inputmode="numeric" value="${ls.w??''}" placeholder="—" aria-label="Ватты"><button data-a="mW" data-d="10" aria-label="Больше">+</button></div></div>
+function mRecCard(ls,r){ const tg=r.tg&&r.tg.sprintW&&r.type==='A'&&!ls.test?r.tg.sprintW:null; const tgLine=tg?`<p style="font-size:14px">${ls.w==null?`Цель из теста: не ниже <b>${tg} Вт</b> (90% от лучшего спринта ${r.tg.rsaBest} Вт).`:ls.w>=tg?`<span class="badge good">уровень держите</span> ${ls.w} Вт из цели ≥ ${tg}`:`<span class="badge bad">ниже цели</span> ${ls.w} Вт при цели ≥ ${tg}. Если это не первый подход — возможно, пора заканчивать серию.`}</p>`:''; return `<section class="card"><div class="lbl">${ls.test==='rsa'?'Спринт '+ls.n:'Подход '+ls.se+'.'+ls.n} · ватты с экрана аэробайка</div>
+  ${tgLine}<div class="row"><div class="grow">Ватты ${ls.test==='rsa'?'':'<span class="muted">(по желанию)</span>'}</div><div class="stp" style="width:170px;height:48px"><button data-a="mW" data-d="-10" aria-label="Меньше">−</button><input id="mWin" data-f="mWin" inputmode="numeric" value="${ls.w??''}" placeholder="—" aria-label="Ватты"><button data-a="mW" data-d="10" aria-label="Больше">+</button></div></div>
   ${r.type==='A'?`<p class="muted" style="font-size:13px">По ваттам программа следит за падением мощности: больше ${r.pDrop}% от лучшего подхода серии — серию пора заканчивать.</p><button class="btn wide ${ls.burn?'danger outline':''}" data-a="mBurn">${ls.burn?'Отмечено: жжение к концу подхода':'Было жжение к концу подхода'}</button>${ls.burn?'<p class="muted" style="font-size:13px">Если жжёт уже к 10-й секунде — сократите подход до 8 с, мощность не снижайте.</p>':''}`:''}</section>`; }
 function mTestCard(r){ const doneIdx=t=>{ const i=r.steps.findIndex(s=>s.test===t); return i>=0&&(r.done||r.idx>i); }; let f='';
   if(doneIdx('fix')) f+=`<label class="field"><span>Тест 1: средние ватты за последние 5 минут${r.res.fixN?` (средний пульс ${Math.round(r.res.fixSum/r.res.fixN)})`:''}</span><input class="in" id="tr_fixW" data-f="mRes" data-k="fixW" inputmode="numeric" value="${r.res.fixW??''}"></label>`;
@@ -786,6 +803,7 @@ function viewMitoSession(s){ if(s.v!==2) return viewMitoLegacy(s); const recs=s.
   if(s.type==='T') b+=`<div class="tiles"><div class="tile"><b>${res.fixW?res.fixW:'—'}</b><span>Вт на пульсе ${res.fixHr||''}</span></div><div class="tile"><b>${res.rsaDec!=null?fmt(res.rsaDec,1)+'%':'—'}</b><span>падение в спринтах${res.rsaMean?', ср. '+res.rsaMean+' Вт':''}</span></div><div class="tile"><b>${res.maxW?res.maxW+' Вт':res.maxCal?res.maxCal+' ккал':'—'}</b><span>5 минут${res.maxHr?', пик '+res.maxHr:''}</span></div></div>`;
   else if(s.type==='B') b+=`<div class="tiles"><div class="tile"><b>${durTxt(s.end-s.start)}</b><span>длительность</span></div><div class="tile"><b>${s.zonePct!=null?s.zonePct+'%':'—'}</b><span>времени в целевой зоне</span></div><div class="tile"><b>${s.hr?s.hr.avg:'—'}</b><span>средний пульс</span></div></div>`;
   else b+=`<div class="tiles"><div class="tile"><b>${recs.length}</b><span>подходов</span></div><div class="tile"><b>${ws.length?Math.round(mAvg(ws)):'—'}</b><span>средние ватты</span></div><div class="tile"><b>${ws.length?Math.max(...ws):'—'}</b><span>лучшие ватты</span></div></div>`;
+  if(s.type==='T'){ const T=mTests(s.profileId), i=T.findIndex(x=>x.id===s.id); if(i>0){ const c=mCompare(T[i-1],s); if(c.cmp) b+=`<section class="card"><div class="lbl">По сравнению с тестом ${dfmt(T[i-1].start,{day:'numeric',month:'long'})}</div>${c.better.length?`<p><span class="badge good">лучше</span> ${c.better.join(', ')}</p>`:''}${c.same.length?`<p><span class="badge">без заметного роста</span> ${c.same.join(', ')}</p>`:''}<p class="muted" style="font-size:13px">«Лучше» — рост от 2% (падение мощности — на 1 пункт меньше).</p></section>`; } }
   if(s.warnStop) b+=`<p class="warn">Пульс в паузе превысил ${s.hrStop}: ${s.warnStop}.</p>`;
   if(s.hr) b+=hrCard(s.hr);
   if(recs.length){ const hasB=recs.some(x=>x.burn);
@@ -834,7 +852,7 @@ function viewMitoGuide(){ const p=mp(); const sec=(h,t)=>`<section class="card">
   +sec('Сессия A · спринты','<p><b>8–10 с почти на максимум</b> (RPE 9–10), руки и ноги. Отдых <b>фиксированный</b>, 60–90 с лёгкого кручения. Между сериями 5 минут.</p><p>Серия заканчивается, когда мощность упала больше чем на 15% от лучшего подхода серии — впишите ватты с экрана аэробайка, программа подскажет. Если жжёт уже к 10-й секунде — сократите подход до 8 с, а не снижайте мощность.</p>')
   +sec('Сессия B · аэробная',`<p>Зона 2 (${mPct(p,65)}–${mPct(p,75)}): ровно, можно говорить фразами. На 5-й и 7-й неделе — интервалы 4 × 4 мин на ${mPct(p,85)}–${mPct(p,90)}, отдых 3 мин. Программа даёт сигнал, если пульс вышел из коридора.</p>`)
   +sec('Пульс',`<p>ЧСС макс. по формуле Танаки 208 − 0,7 × возраст, для ${p.age} лет — ${Math.round(208-0.7*p.age)}. Ошибка у конкретного человека ±10–20 ударов, поэтому лучше замер в тесте 3.</p><p>На 10-секундном спринте пульс не ограничивается: он отстаёт от нагрузки на 10–30 с. Стоп-сигнал: если к концу паузы пульс выше 80% максимума — тренировку лучше закончить.</p>`)
-  +sec('Тесты: неделя 0, 4 и 8','<p>1. 10 минут на пульсе 70–75% — средние ватты за последние 5 минут. 2. 8 спринтов по 8 с со стартом каждую минуту — падение мощности. 3. 5 минут на максимум — ватты или калории и реальный пик пульса.</p><p>Растут ватты на том же пульсе, падение мощности уменьшается — адаптация идёт.</p>')
+  +sec('Тесты: неделя 0, 4 и 8','<p>1. 10 минут на пульсе 70–75% — средние ватты за последние 5 минут. 2. 8 спринтов по 8 с со стартом каждую минуту — падение мощности. 3. 5 минут на максимум — ватты или калории и реальный пик пульса.</p><p>Растут ватты на том же пульсе, падение мощности уменьшается — адаптация идёт.</p><p>После тестов программа задаёт уровни: в спринтах — не ниже 90% от лучшего спринта теста 2, в зоне 2 — ватты из теста 1. Если тесты не улучшились, программа предложит повторить предыдущую неделю, а не повышать объём.</p>')
   +sec('С BJJ',`<p>Не ставить спринты в день тяжёлых спаррингов. ${p.age>=45?'В 45+ — 1 спринт-сессия и 1 аэробная в неделю, между спринтами 48–72 часа.':'До 45 лет — до 2 спринт-сессий и 1 аэробной, если неделя BJJ не тяжёлая.'} Скоростная выносливость 4 × 20 с с 6-й недели — по желанию и только при лёгкой неделе BJJ.</p>`)
   +sec('Безопасность','<p>Перед циклом в 40+ — ЭКГ, при факторах риска (давление, холестерин, курение, диабет, ранние инфаркты у родных) — нагрузочный тест. Немедленно остановиться: боль или давление в груди, необычная одышка, головокружение, перебои. Не задерживать дыхание на спринте. Не тренироваться больным, после бессонной ночи, в жару без адаптации. Беречь плечи: разминка с 2–3 разгонами.</p>');
   return {head:hdr('Руководство',{back:true,sub:'митохондрии на аэробайке'}),body:b}; }
@@ -1434,6 +1452,8 @@ const A={
   mW:el=>{ const r=MITO.run, ls=[...r.recs].reverse().find(s=>s.endT); if(!ls) return; const prev=[...r.recs].reverse().find(s=>s.w!=null); ls.w=Math.max(0,ls.w!=null?ls.w+(+el.dataset.d):(prev?prev.w:400)); persist(); render(); },
   mBurn:()=>{ const r=MITO.run, ls=[...r.recs].reverse().find(s=>s.endT); if(ls){ ls.burn=!ls.burn; persist(); render(); } },
   mEndSeries:()=>mEndSeries(),
+  mAdvRep:el=>{ const p=mp(), x=SESS.find(y=>y.id===el.dataset.id); p.week=+el.dataset.w; p.doneA=0; p.doneB=0; if(x){ x.advice='repeat'; saveSession(x); } saveState(); toast('Неделя '+el.dataset.w+' — повтор'); render(); },
+  mAdvKeep:el=>{ const x=SESS.find(y=>y.id===el.dataset.id); if(x){ x.advice='keep'; saveSession(x); } render(); },
   mSetMax:()=>{ const r=MITO.run, p=S.mito.profiles.find(x=>x.id===r.pid); if(p&&r.res.maxHr){ p.hrMax=r.res.maxHr; saveState(); toast('ЧСС макс. обновлена: '+r.res.maxHr); render(); } },
   mFinish:()=>mFinishSheet(),
   mSave:el=>mSave(el.dataset.c==='1'),
