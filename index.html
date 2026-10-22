@@ -101,6 +101,7 @@ select.in{appearance:auto}
 .li .t{font-weight:500}
 .li .s{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
 .li .chev{color:var(--muted);flex:none}
+.card.li{flex-direction:row;align-items:center}
 .badge{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:600;background:var(--surface2);color:var(--muted);white-space:nowrap}
 .badge.acc{background:var(--accent-soft);color:var(--accent-text)}
 .badge.good{background:var(--good-soft);color:var(--good)}
@@ -236,7 +237,7 @@ body.has-timer #toast{bottom:calc(290px + env(safe-area-inset-bottom,0px))}
 /* stats */
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .tile{background:var(--surface);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow);min-width:0}
-.tile b{font:600 25px/1.1 var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile b{font:600 24px/1.1 var(--f-num);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .tile span{font-size:12px;color:var(--muted)}
 .chart{width:100%;height:auto;display:block}
 .chart text{fill:var(--muted);font:11px var(--f-body)}
@@ -264,6 +265,7 @@ html{padding-top:env(safe-area-inset-top,0px)}
 [hidden]{display:none!important}
 img{max-width:100%}
 .upd{position:fixed;left:0;right:0;top:calc(8px + env(safe-area-inset-top,0px));z-index:40;display:flex;justify-content:center;padding:0 16px}
+@media (max-width:390px){.mhr>div:not(:first-child) b{font-size:22px}.mhr>div:first-child b{font-size:40px}.ex{padding:10px}.set,.sets-h{grid-template-columns:22px minmax(0,1.25fr) minmax(0,1fr) 44px;gap:4px}.set .stp{grid-template-columns:28px minmax(0,1fr) 28px}.set .stp input{font-size:20px}.set .stp button{font-size:21px}.chk{width:44px;height:44px}.pl-line{padding-left:26px}.tile b{font-size:21px}}
 </style>
 </head>
 <body>
@@ -483,9 +485,9 @@ function signal(kind){ const m=S.settings.signal; if(m==='none') return;
 let WL=null, wlState='none';
 async function wakeOn(){ if(!('wakeLock' in navigator)){ wlState='off'; updWL(); return; }
   try{ if(WL&&!WL.released){ wlState='on'; updWL(); return; } WL=await navigator.wakeLock.request('screen'); wlState='on'; WL.addEventListener('release',()=>{ wlState=document.visibilityState==='visible'&&ACT?'off':'none'; updWL(); }); }catch(e){ wlState='off'; } updWL(); }
-function wakeOff(){ try{ WL&&WL.release(); }catch(e){} WL=null; wlState='none'; }
+function wakeOff(){ if(ACT||(typeof MITO!=='undefined'&&MITO.run&&!MITO.run.done)||(typeof CAR!=='undefined'&&CAR.rec)) return; try{ WL&&WL.release(); }catch(e){} WL=null; wlState='none'; }
 function updWL(){ const el=$('#wl'); if(!el) return; el.className='wl '+(wlState==='on'?'on':'off'); el.textContent=wlState==='on'?'экран не гаснет':'экран может погаснуть — нажмите'; }
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ if(ACT) wakeOn(); tick(); } });
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ if(ACT||MITO.run||CAR.rec||UI.view==='cardio'||UI.view==='mito') wakeOn(); tick(); } });
 
 /* ---------- heart rate (Bluetooth, standard Heart Rate Service) ---------- */
 const HR={dev:null,bpm:null,last:0,state:'off',tries:0};
@@ -773,7 +775,7 @@ function viewMitoRun(){ const r=MITO.run, s=mStep(), nx=r.steps[r.idx+1], ls=[..
   const lbl=r.done?'Тренировка завершена':r.tr?(r.tr.k==='wait'?`Ждём пульс ≤ ${r.recHi}`:'Приготовиться'):s.lbl;
   const hint=r.done||r.tr?'':s.ph==='steady'&&s.zone?`Держите пульс ${s.zone[0]}–${s.zone[1]}${r.zs&&r.zs.out==='hi'?' · снизьте темп':r.zs&&r.zs.out==='lo'?' · прибавьте':''}`:(s.hint||'');
   let b=`<div class="mph ${cls}"><div class="mlbl">${esc(lbl)}${r.paused!=null?' · пауза':''}</div>${hint?`<div class="mhint">${esc(hint)}</div>`:''}<div class="mbig num" id="mBig">${mBigTxt()}</div><div class="mprog">${mProgTxt()}</div></div>`;
-  const zoneTile=s&&s.ph==='steady'&&s.zone?`<div><span>Цель${s.lbl==='Зона 2'&&r.tg&&r.tg.z2W?' · ≈'+r.tg.z2W+' Вт':''}</span><b class="num">${s.zone[0]}–${s.zone[1]}</b></div>`:`<div><span>Стоп в паузе</span><b class="num">&gt; ${r.hrStop}</b></div>`;
+  const zoneTile=s&&s.ph==='steady'&&s.zone?`<div><span>Цель${s.lbl==='Зона 2'&&r.tg&&r.tg.z2W?' · ≈'+r.tg.z2W+' Вт':''}</span><b class="num">${s.zone[0]}–${s.zone[1]}</b></div>`:(r.type==='A'||r.type==='SE')?`<div><span>Стоп в паузе</span><b class="num">&gt; ${r.hrStop}</b></div>`:`<div><span>Пик</span><b class="num">${r.s.length?Math.max(...r.s.map(x=>x[1])):'—'}</b></div>`;
   b+=`<div class="mhr"><div><span>Пульс</span><b class="num" id="mHrv" style="color:${mHrColor()}">${hrFresh()?HR.bpm:'—'}</b></div>${zoneTile}<div><span>ЧСС макс.</span><b class="num">${r.hrMax}</b></div></div>`;
   if(HR.state!=='on') b+=`<button class="btn wide" data-a="hrConnect">♥ Подключить Polar H9</button>`;
   if(r.recs.length) b+=`<div class="last" id="mLast" style="padding:0 4px">${mLastTxt()}</div>`;
@@ -795,7 +797,7 @@ function mRecCard(ls,r){ const tg=r.tg&&r.tg.sprintW&&r.type==='A'&&!ls.test?r.t
 function mTestCard(r){ const doneIdx=t=>{ const i=r.steps.findIndex(s=>s.test===t); return i>=0&&(r.done||r.idx>i); }; let f='';
   if(doneIdx('fix')) f+=`<label class="field"><span>Тест 1: средние ватты за последние 5 минут${r.res.fixN?` (средний пульс ${Math.round(r.res.fixSum/r.res.fixN)})`:''}</span><input class="in" id="tr_fixW" data-f="mRes" data-k="fixW" inputmode="numeric" value="${r.res.fixW??''}"></label>`;
   if(r.steps.some(s=>s.test==='rsa')&&(r.done||r.recs.some(x=>x.test==='rsa'&&x.endT))){ const rs=r.recs.filter(x=>x.test==='rsa'&&x.w); if(rs.length>=2){ const best=Math.max(...rs.map(x=>x.w)), mean=mAvg(rs.map(x=>x.w)); f+=`<p>Тест 2: лучший ${best} Вт · средний ${Math.round(mean)} Вт · падение <b>${fmt((1-mean/best)*100,1)}%</b></p>`; } else f+=`<p class="muted">Тест 2: впишите ватты каждого спринта в паузе.</p>`; }
-  if(doneIdx('max')) f+=`<div class="fgrid"><label class="field"><span>Тест 3: средние ватты</span><input class="in" id="tr_maxW" data-f="mRes" data-k="maxW" inputmode="numeric" value="${r.res.maxW??''}"></label><label class="field"><span>или калории</span><input class="in" id="tr_maxCal" data-f="mRes" data-k="maxCal" inputmode="numeric" value="${r.res.maxCal??''}"></label></div>${r.res.maxHr?`<p class="muted">Пик пульса в тесте: ${r.res.maxHr}</p>`:''}`;
+  if(doneIdx('max')) f+=`<div class="fgrid"><label class="field"><span>Тест 3: ватты</span><input class="in" id="tr_maxW" data-f="mRes" data-k="maxW" inputmode="numeric" value="${r.res.maxW??''}"></label><label class="field"><span>Тест 3: калории</span><input class="in" id="tr_maxCal" data-f="mRes" data-k="maxCal" inputmode="numeric" value="${r.res.maxCal??''}"></label></div>${r.res.maxHr?`<p class="muted">Пик пульса в тесте: ${r.res.maxHr}</p>`:''}`;
   return f?`<section class="card"><div class="lbl">Результаты тестов</div>${f}</section>`:''; }
 function viewMitoSession(s){ if(s.v!==2) return viewMitoLegacy(s); const recs=s.recs||[], res=s.res||{}; const ws=recs.map(x=>x.w).filter(x=>x);
   let b=UI.fresh===s.id?`<div class="banner"><div class="grow"><b>Тренировка сохранена.</b> ${s.type==='A'||s.type==='B'?(s.counted?'Засчитана в неделю протокола.':'Не засчитана в неделю.'):''}</div></div>`:'';
@@ -1126,9 +1128,9 @@ const BM=[['w','Вес','кг'],['waist','Талия','см'],['chest','Груд
 function viewBody(){
   const list=[...S.body].sort((a,c)=>a.d<c.d?1:-1); const m=BM.find(x=>x[0]===UI.bodyMetric)||BM[0];
   let b=`<section class="card"><div class="lbl">Новая запись</div><div class="fgrid"><label class="field"><span>Дата</span><input class="in" type="date" id="bd" value="${todayStr()}"></label>${BM.map(([k,l,u])=>`<label class="field"><span>${l}, ${u}</span><input class="in" id="b_${k}" inputmode="decimal" placeholder="—"></label>`).join('')}</div><button class="btn primary wide" data-a="bodySave">Сохранить</button></section>`;
-  const pts=[...list].reverse().filter(x=>x[m[0]]).map(x=>({x:new Date(x.d).toLocaleDateString('ru-RU',{day:'numeric',month:'short'}),y:x[m[0]]}));
+  const pts=[...list].reverse().filter(x=>x[m[0]]).map(x=>({x:new Date(x.d+'T12:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}),y:x[m[0]]}));
   b+=`<section class="card"><div class="chips">${BM.map(([k,l])=>`<button class="chip ${k===m[0]?'on':''}" data-a="bodyMetric" data-k="${k}">${l}</button>`).join('')}</div>${pts.length?lineChart(pts,m[2]):`<p class="muted">Нет записей «${m[1].toLowerCase()}».</p>`}</section>`;
-  if(list.length) b+=`<section class="card"><div class="lbl">Записи</div><div class="tbl-wrap"><table><tr><th>Дата</th>${BM.map(x=>`<th>${x[1]}</th>`).join('')}<th></th></tr>${list.map(x=>`<tr><td>${new Date(x.d).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'})}</td>${BM.map(([k])=>`<td class="num">${x[k]?fmt(x[k],1):''}</td>`).join('')}<td><button class="ib" style="width:36px;height:36px" data-a="bodyDel" data-id="${x.id}" aria-label="Удалить запись">${IC.x}</button></td></tr>`).join('')}</table></div></section>`;
+  if(list.length) b+=`<section class="card"><div class="lbl">Записи</div><div class="tbl-wrap"><table><tr><th>Дата</th>${BM.map(x=>`<th>${x[1]}</th>`).join('')}<th></th></tr>${list.map(x=>`<tr><td style="white-space:nowrap">${new Date(x.d+'T12:00').toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td>${BM.map(([k])=>`<td class="num">${x[k]?fmt(x[k],1):''}</td>`).join('')}<td><button class="ib" style="width:36px;height:36px" data-a="bodyDel" data-id="${x.id}" aria-label="Удалить запись">${IC.x}</button></td></tr>`).join('')}</table></div></section>`;
   return {head:hdr('Вес и замеры',{sub:bwNow()?`Текущий вес ${fmt(bwNow(),1)} кг — используется для упражнений со своим весом`:''}),body:b};
 }
 
@@ -1477,8 +1479,8 @@ function applyTheme(){ const t=S.settings.theme; if(t==='auto') delete document.
 
 const F={
   gym:el=>{ S.gymId=el.value; saveState(); render(); },
-  w:el=>{ const c=ctx(el); const v=num(el.value); c.s.w=v==null?null:r2(v); propagate(c.e,c.si); saveActive(); render(); },
-  r:el=>{ const c=ctx(el); const v=num(el.value); c.s.r=v==null?0:Math.max(0,Math.round(v)); saveActive(); render(); },
+  w:el=>{ const c=ctx(el); const v=num(el.value); if(v!=null&&v<0&&exOf(c.e).equip!=='bodyweight'){ toast('Вес не может быть отрицательным'); render(); return; } if(v!=null&&v>1000){ toast('Слишком большой вес'); render(); return; } c.s.w=v==null?null:r2(v); propagate(c.e,c.si); saveActive(); render(); },
+  r:el=>{ const c=ctx(el); const v=num(el.value); c.s.r=v==null?0:Math.min(100,Math.max(0,Math.round(v))); saveActive(); render(); },
   actNote:el=>{ ACT.note=el.value; saveActive(); },
   sessNote:el=>{ const s=SESS.find(x=>x.id===UI.id); if(s){ s.note=el.value; saveSession(s); toast('Заметка сохранена'); } },
   dx:el=>{ const d=UI.draft, k=el.dataset.k; let v=el.value; if(k==='step'||k==='start'){ v=num(v); } if(k==='rest'){ v=num(v); v=v?Math.round(v):null; } if(k==='step'&&!(v>0)) v=5; d[k]=v; if(k==='equip'){ if(v==='barbell'&&!d.bar) d.bar='Олимпийский'; d.warm=v!=='bodyweight'; render(); } if(k==='machine') render(); },
@@ -1517,11 +1519,11 @@ const F={
   mRes:el=>{ const r=MITO.run; if(!r) return; const v=num(el.value); r.res[el.dataset.k]=v!=null&&v>=0?Math.round(v):null; persist(); },
   cM:el=>{ UI.calc.m=+el.value; render(); },
   gDbF:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.db.fixed=el.value; saveState(); render(); },
-  cGym:el=>{ UI.calc.gymId=el.value; UI.calc.bar=0; render(); },
+  cGym:el=>{ const c=UI.calc; c.gymId=el.value; c.bar=0; const g=gymOf(c.gymId), mi=(g.machines||[]).findIndex(m=>m.type==='plate'); if(c.kind==='m'){ if(mi<0) c.kind='bar'; else c.m=mi; } render(); },
   cBar:el=>{ UI.calc.bar=+el.value; render(); },
   cTwo:el=>{ UI.calc.two=el.checked; render(); },
   cW:el=>{ const v=num(el.value); if(v!=null&&v>=0) UI.calc.w=v; render(); },
-  warm:el=>{ const w=S.settings.warm[+el.dataset.i]; const v=num(el.value); if(v!=null&&v>0) w[el.dataset.k]=Math.round(v); saveState(); render(); },
+  warm:el=>{ const w=S.settings.warm[+el.dataset.i]; const v=num(el.value); if(v!=null&&v>0) w[el.dataset.k]=Math.min(el.dataset.k==='p'?100:30,Math.round(v)); saveState(); render(); },
   sBw:el=>{ const v=num(el.value); S.settings.bw=v&&v>0?v:null; saveState(); },
 };
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-a]'); if(!el||el.disabled) return; const f=A[el.dataset.a]; if(f){ ev.preventDefault(); try{ f(el,ev); }catch(err){ console.error(err); toast('Не получилось выполнить действие'); } } });
