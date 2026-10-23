@@ -147,6 +147,10 @@ select.in{appearance:auto}
 .mhr span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mhr b{font:700 34px/1.1 var(--f-num)}.mhr>div:first-child b{font-size:46px}
 .plrow{display:grid;grid-template-columns:34px repeat(3,minmax(0,1fr)) 44px 40px;gap:6px;align-items:center}
 .plh{font-size:12px;color:var(--muted)}.pin{text-align:center;padding:0 4px;min-height:44px}
+.wcard{border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface2);color:var(--fg)}
+.wcard.in{background:var(--p-green);color:#fff}.wcard.hi{background:var(--p-red);color:#fff}.wcard.lo{background:var(--p-blue);color:#fff}
+.wbig{font:700 52px/1 var(--f-num)}
+.wcard .tmctl button{background:rgba(255,255,255,.2);color:inherit}.wcard:not(.in):not(.hi):not(.lo) .tmctl button{background:var(--surface);color:var(--fg)}.wcard .tmctl .go{background:var(--fg);color:var(--bg)}
 .cbig{border-radius:24px;padding:18px 16px 16px;text-align:center;background:var(--surface2);color:var(--fg);display:flex;flex-direction:column;gap:2px;transition:background .3s}
 .cbig.hi{background:var(--p-red);color:#fff}.cbig.lo{background:var(--p-blue);color:#fff}.cbig.mid{background:var(--accent);color:var(--accent-ink)}
 .cbpm{font:700 128px/1 var(--f-num);letter-spacing:-.02em}
@@ -871,7 +875,7 @@ function renderTimer(){ const el=$('#timer'); const t=ACT&&ACT.timer; document.b
   <div class="tm-main"><button class="tm-b" data-a="tmAdd" data-d="-30" aria-label="Минус 30 секунд">−30</button><div class="tm-time" id="tmTime">${fmtSec(Math.ceil(Math.max(0,t.end-Date.now())/1000))}</div><button class="tm-b" data-a="tmAdd" data-d="30" aria-label="Плюс 30 секунд">+30</button></div>
   <div class="tm-bar"><i id="tmBar"></i></div><button class="btn primary wide" data-a="tmSkip">${t.fired?'Готово':'Пропустить отдых'}</button></div>`;
   tick(); }
-function tick(){ if(!ACT) return; const now=Date.now(); const e=document.getElementById('elapsed'); if(e) e.textContent=fmtDur(now-ACT.start);
+function tick(){ if(!ACT) return; wTick(); const now=Date.now(); const e=document.getElementById('elapsed'); if(e) e.textContent=fmtDur(now-ACT.start);
   const t=ACT.timer; if(!t) return; const rem=Math.max(0,t.end-now), sec=Math.ceil(rem/1000);
   const te=document.getElementById('tmTime'); if(te) te.textContent=fmtSec(sec);
   const b=document.getElementById('tmBar'); if(b) b.style.width=(100*rem/(t.total*1000))+'%';
@@ -1004,7 +1008,7 @@ function viewHome(){
   b+=`<label class="field"><span>Зал</span><select class="in" id="gymSel" data-f="gym">${S.gyms.map(g=>`<option value="${g.id}" ${g.id===gym.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>`;
   if(nt){ const ld=lastDone(nt.id);
     b+=`<section class="next"><div><div class="lbl">Следующая по очереди</div><h2>${esc(nt.name)}</h2>${ld?`<div class="muted" style="font-size:14px">Последний раз ${dfmt(ld,{day:'numeric',month:'long'})}</div>`:''}</div>
-    <div class="plan-l">${tplPreview(nt,gym)||'<div class="muted">В шаблоне нет упражнений</div>'}</div><p class="muted" style="font-size:13px">Нажмите на упражнение, чтобы заранее задать вес.</p>
+    <div class="plan-l">${nt.warm&&nt.warm.on?`<div><span>Разминка на аэробайке</span><b>${nt.warm.min} мин</b></div>`:''}${tplPreview(nt,gym)||'<div class="muted">В шаблоне нет упражнений</div>'}</div><p class="muted" style="font-size:13px">Нажмите на упражнение, чтобы заранее задать вес.</p>
     <button class="btn primary big wide" data-a="start" data-id="${nt.id}">Начать тренировку</button></section>`;
     const others=S.templates.filter(t=>t.id!==nt.id);
     if(others.length) b+=`<section class="card"><div class="lbl">Другие шаблоны</div><div class="list">${others.map(t=>{const ld=lastDone(t.id); return `<div class="li"><button class="grow" style="border:0;background:none;text-align:left;padding:0" data-a="go" data-v="tplEdit" data-id="${t.id}"><div class="t">${esc(t.name)}</div><div class="s">${t.items.length} ${plural(t.items.length,'упражнение','упражнения','упражнений')}${ld?' · '+dfmt(ld):''}${t.items.some(i=>i.pre)?' · <span class="badge acc">веса заданы</span>':''} · веса ›</div></button><button class="btn sm" data-a="start" data-id="${t.id}">Начать</button></div>`;}).join('')}</div></section>`;
@@ -1016,7 +1020,7 @@ function viewHome(){
 function viewWorkout(){
   const gym=gymOf(ACT.gymId);
   const head=`<div class="hd"><div class="hd-t"><h1>${esc(ACT.name)}</h1><div class="hd-sub"><span>${esc(gym.name)}</span><span id="elapsed" class="num">${fmtDur(Date.now()-ACT.start)}</span><button class="wl" id="wl" data-a="wl"></button>${hrChip()}</div></div><button class="btn primary sm" data-a="finish">Завершить</button></div>`;
-  let b=ACT.entries.map((e,ei)=>entryCard(e,ei,gym)).join('');
+  let b=warmCard()+ACT.entries.map((e,ei)=>entryCard(e,ei,gym)).join('');
   if(!ACT.entries.length) b+=`<div class="card empty"><h3>Добавьте упражнения</h3><p>Выберите их из каталога.</p></div>`;
   b+=`<button class="btn wide outline" data-a="addEx">${IC.plus} Добавить упражнение</button>
   <label class="field"><span>Заметка к тренировке</span><textarea class="in" id="actNote" data-f="actNote" placeholder="Самочувствие, сон, что мешало">${esc(ACT.note)}</textarea></label>
@@ -1071,6 +1075,7 @@ function viewSession(){ const s=SESS.find(x=>x.id===UI.id); if(!s||s.del){ UI.vi
   let b='';
   if(UI.fresh===s.id) b+=`<div class="banner"><div class="grow"><b>Тренировка сохранена.</b> Следующая по очереди: ${esc((nextTpl()||{}).name||'—')}.</div></div>`+backupBanner();
   b+=`<div class="tiles"><div class="tile"><b>${ton(tot)}</b><span>общий тоннаж</span></div><div class="tile"><b>${ton(wt)}</b><span>в рабочих подходах</span></div><div class="tile"><b>${durTxt(s.end-s.start)}</b><span>${nSets} ${plural(nSets,'подход','подхода','подходов')}</span></div></div>`;
+  if(s.warm) b+=`<p class="muted" style="font-size:14px">Разминка на аэробайке: ${fmtSec(s.warm.sec)}${s.warm.avg?`, средний пульс ${s.warm.avg}, макс. ${s.warm.max}`:''} (цель ${s.warm.lo}–${s.warm.hi})</p>`;
   if(s.hr) b+=hrCard(s.hr);
   if(s.prs&&s.prs.length) b+=`<section class="card"><div class="lbl">Рекорды</div>${s.prs.map(p=>`<div class="pr"><span class="badge good">${esc(p.t)}</span><span class="grow">${esc(p.name)}</span><b>${fmt(p.from,1)} → ${fmt(p.to,1)} кг</b></div>`).join('')}</section>`;
   s.entries.forEach(e=>{ const e1=entryE1(e);
@@ -1186,6 +1191,10 @@ function viewTplList(){
 }
 function viewTplEdit(){ const t=S.templates.find(x=>x.id===UI.id); if(!t){ UI.view=null; return TABS[UI.tab](); }
   let b=`<label class="field"><span>Название</span><input class="in" id="tplName" data-f="tplName" value="${esc(t.name)}"></label>
+  ${(()=>{ const w=t.warm||{...WDEF,on:false}, m=wHrMax(); return `<section class="card"><label class="check"><input type="checkbox" id="tw_on" data-f="twOn" ${w.on?'checked':''}> <b>Разминка на аэробайке в начале</b></label>${w.on?`
+    <div class="row"><div class="grow">Длительность</div><div class="stp" style="width:150px;height:44px"><button data-a="twMin" data-d="-1" aria-label="Меньше">−</button><input readonly value="${w.min} мин" style="font-size:19px" aria-label="Минуты"><button data-a="twMin" data-d="1" aria-label="Больше">+</button></div></div>
+    <div class="fgrid"><label class="field"><span>Пульс от, % макс.</span><input class="in" id="tw_lo" data-f="twPct" data-k="lo" inputmode="numeric" value="${w.lo}"></label><label class="field"><span>до, % макс.</span><input class="in" id="tw_hi" data-f="twPct" data-k="hi" inputmode="numeric" value="${w.hi}"></label></div>
+    <p class="muted" style="font-size:13px">Коридор ${Math.round(m*w.lo/100)}–${Math.round(m*w.hi/100)} уд/мин от максимума ${m}${S.settings.hrMax?' (из настроек)':' (из профиля «Митохондрии»)'}. Сигнал, если пульс вышел из коридора; первые 1,5 минуты пульс только разгоняется — без сигналов.</p>`:''}</section>`; })()}
   <section class="card"><div class="lbl">Упражнения по порядку</div><div class="list">${t.items.map((it,i)=>{ const ex=exById(it.exId); return `<div class="li"><div class="grow"><div class="t">${esc(ex?ex.name:'Удалено из каталога')}</div><div class="s">${ex?ex.group+' · '+EQUIP[ex.equip]:''}</div>${ex?`<button class="btn sm outline" style="margin-top:6px" data-a="preOpen" data-t="${t.id}" data-i="${i}">${(()=>{ const e=buildEntry(ex,gymOf(S.gymId),it.pre); const w=(e.sets.find(x=>x.k==='w')||{}).w; return (e.plan.kind==='pre'?'Задан: ':'Вес: ')+(w==null?'не задан':fmt(w)+' кг'); })()}</button>`:''}</div><button class="ib" data-a="tiMove" data-i="${i}" data-d="-1" aria-label="Выше" ${i===0?'disabled':''}>${IC.up}</button><button class="ib" data-a="tiMove" data-i="${i}" data-d="1" aria-label="Ниже" ${i===t.items.length-1?'disabled':''}>${IC.down}</button><button class="ib" data-a="tiDel" data-i="${i}" aria-label="Убрать">${IC.x}</button></div>`; }).join('')||'<p class="muted" style="padding:12px 0">Добавьте упражнения</p>'}</div>
   <button class="btn wide outline" data-a="tplAddEx">${IC.plus} Добавить упражнения</button></section>
   <div class="btns"><button class="btn" data-a="tplNext" data-id="${t.id}">Сделать следующей</button><button class="btn primary" data-a="start" data-id="${t.id}">Начать сейчас</button></div>
@@ -1310,10 +1319,32 @@ function renderPick(){ const st=SHEET; const q=st.q.toLowerCase();
 
 /* ---------- actions ---------- */
 function ctx(el){ const a=el.closest('[data-ei]'), b=el.closest('[data-si]'); const ei=a?+a.dataset.ei:null, si=b?+b.dataset.si:null; const e=(ei!=null&&ACT)?ACT.entries[ei]:null; return {ei,si,e,s:e&&si!=null?e.sets[si]:null}; }
+/* ---------- aerobike warm-up inside a strength workout ---------- */
+const wHrMax=()=>S.settings.hrMax||mHrMax(mp());
+const WDEF={on:true,min:5,lo:60,hi:70};
+function wPlan(tw){ const m=wHrMax(); return {sec:Math.round(tw.min*60),lo:Math.round(m*tw.lo/100),hi:Math.round(m*tw.hi/100),start:null,end:null,done:false,paused:null,zs:{out:null,since:0,sig:null}}; }
+function wSigK(k){ if(S.settings.signal==='none') return; if(S.settings.signal==='vibro'){ vib(k==='tmEnd'?[500,200,800]:[250,120,250]); return; } cSig(k); }
+function wLeft(w){ return w.paused!=null?w.paused:Math.max(0,w.start+w.sec*1000-Date.now()); }
+function wStats(w){ const h=ACT.hr&&ACT.hr.s||[]; const a=(w.start-ACT.start)/1000, z=((w.end||Date.now())-ACT.start)/1000; const v=h.filter(x=>x[0]>=a&&x[0]<=z).map(x=>x[1]); return v.length?{avg:Math.round(mAvg(v)),max:Math.max(...v)}:null; }
+function warmCard(){ const w=ACT.warm; if(!w) return ACT.entries.some(e=>e.sets.some(x=>x.done))?'':`<button class="btn wide outline" data-a="wAddW">${IC.plus} Разминка на аэробайке</button>`;
+  if(w.done){ const st=wStats(w); return `<section class="card" style="padding:12px"><div class="row"><div class="grow"><b>Разминка на аэробайке</b> <span class="badge good">готово</span><div class="muted" style="font-size:14px">${fmtSec((w.end-w.start)/1000)}${st?` · средний пульс ${st.avg}, макс. ${st.max}`:''} · цель ${w.lo}–${w.hi}</div></div></div></section>`; }
+  if(!w.start) return `<section class="card"><div class="row"><div class="grow"><div class="lbl">Разминка на аэробайке</div><div style="font-weight:600">${fmtSec(w.sec)} · пульс ${w.lo}–${w.hi}</div><div class="muted" style="font-size:13px">Начните спокойно, к концу выйдите к верхней границе.</div></div></div>${HR.state==='on'?'':'<button class="btn wide" data-a="hrConnect">♥ Подключить Polar H9</button>'}<div class="btns"><button class="btn" data-a="wSkip">Пропустить</button><button class="btn primary" data-a="wStart">Начать</button></div></section>`;
+  const b=hrFresh()?HR.bpm:null, z=b==null?'':b>w.hi?'hi':b<w.lo?'lo':'in';
+  return `<section class="wcard ${z}"><div class="row"><div class="grow"><div class="lbl" style="color:inherit;opacity:.85">Разминка на аэробайке${w.paused!=null?' · пауза':''}</div><div class="wbig num" id="wTime">${fmtSec(Math.ceil(wLeft(w)/1000))}</div></div><div style="text-align:right"><div class="lbl" style="color:inherit;opacity:.85">пульс ${w.lo}–${w.hi}</div><div class="wbig num" id="wHr">${b??'—'}</div></div></div>
+  <div class="mhint" id="wHint">${z==='hi'?'Выше коридора — сбавьте':z==='lo'&&Date.now()-w.start>90000?'Ниже коридора — прибавьте':'Ровный темп, без усилий'}</div>
+  <div class="tmctl"><button data-a="wAdd" aria-label="Плюс минута">+1 мин</button><button class="go" data-a="${w.paused!=null?'wResume':'wPause'}">${w.paused!=null?'Продолжить':'Пауза'}</button><button data-a="wDone">Готово</button></div></section>`; }
+function wTick(){ const w=ACT&&ACT.warm; if(!w||!w.start||w.done||w.paused!=null) return; const now=Date.now(), left=wLeft(w);
+  const t=$('#wTime'); if(t) t.textContent=fmtSec(Math.ceil(left/1000)); const h=$('#wHr'); if(h) h.textContent=hrFresh()?HR.bpm:'—';
+  if(hrFresh()&&now-w.start>90000){ const b=HR.bpm, out=b>w.hi?'hi':b<w.lo?'lo':null, z=w.zs;
+    if(out!==z.out){ z.out=out; z.since=now; render(); }
+    if(out&&z.sig!==out&&now-z.since>=8000){ z.sig=out; wSigK(out); }
+    if(!out) z.sig=null; }
+  if(left<=10000&&!w.pre&&w.sec>20){ w.pre=true; wSigK('tick'); }
+  if(left<=0){ w.done=true; w.end=now; wSigK('tmEnd'); saveActive(); render(); } }
 function startWorkout(tid){
   if(ACT){ setTab('train'); return; }
   const gym=gymOf(S.gymId), t=tid?S.templates.find(x=>x.id===tid):null;
-  ACT={id:uid(),start:Date.now(),gymId:gym.id,gymName:gym.name,tplId:t?t.id:null,name:t?t.name:'Свободная тренировка',entries:t?t.items.filter(i=>exById(i.exId)).map(i=>buildEntry(exById(i.exId),gym,i.pre)):[],note:'',timer:null,lu:Date.now()};
+  ACT={id:uid(),start:Date.now(),gymId:gym.id,gymName:gym.name,tplId:t?t.id:null,name:t?t.name:'Свободная тренировка',entries:t?t.items.filter(i=>exById(i.exId)).map(i=>buildEntry(exById(i.exId),gym,i.pre)):[],note:'',timer:null,lu:Date.now(),warm:t&&t.warm&&t.warm.on?wPlan(t.warm):null};
   audio(); wakeOn(); hrAuto(); saveActive(true); UI.tab='train'; UI.view=null; UI.stack=[]; render(); window.scrollTo(0,0);
 }
 function finishWorkout(){
@@ -1321,6 +1352,7 @@ function finishWorkout(){
   const s={id:ACT.id,start:ACT.start,end:Date.now(),gymId:ACT.gymId,gymName:gymOf(ACT.gymId).name,tplId:ACT.tplId,name:ACT.name,note:ACT.note,
     entries:ACT.entries.map(e=>({exId:e.exId,name:e.name,equip:e.equip,group:e.group,two:e.two,bw:e.bw,note:e.note,sets:e.sets.filter(x=>x.done&&x.w!=null).map(x=>x.hr?{k:x.k,w:x.w,r:x.r,hr:x.hr}:{k:x.k,w:x.w,r:x.r})})).filter(e=>e.sets.length)};
   { const hs=hrSummary(ACT.hr); if(hs) s.hr=hs; }
+  { const w=ACT.warm; if(w&&w.start){ const st=wStats(w); s.warm={sec:Math.round(((w.end||Date.now())-w.start)/1000),lo:w.lo,hi:w.hi,avg:st?st.avg:null,max:st?st.max:null}; } }
   s.prs=[]; s.entries.forEach(e=>{ const h=exHistory(e.exId,prev); if(!h.length) return; const cur=entryE1(e), best=Math.max(...h.map(x=>x.e1)); if(cur>best+0.05) s.prs.push({t:'1ПМ',name:e.name,from:best,to:cur});
     const ws=e.sets.filter(x=>x.k==='w'); const topW=Math.max(...ws.map(x=>x.w)), bestW=Math.max(...h.map(x=>x.topW)); if(topW>bestW+1e-9) s.prs.push({t:'Вес',name:e.name,from:bestW,to:topW}); });
   if(!s.entries.length){ ACT=null; saveActive(true); wakeOff(); closeSheet(); toast('Нет выполненных подходов — тренировка не сохранена'); setTab('train'); return; }
@@ -1393,6 +1425,14 @@ const A={
   tplNext:el=>{ S.nextTpl=el.dataset.id; saveState(); toast('Будет следующей'); render(); },
   tiMove:el=>{ const t=S.templates.find(x=>x.id===UI.id), i=+el.dataset.i, j=i+(+el.dataset.d); if(j<0||j>=t.items.length) return; [t.items[i],t.items[j]]=[t.items[j],t.items[i]]; saveState(); render(); },
   tiDel:el=>{ const t=S.templates.find(x=>x.id===UI.id); t.items.splice(+el.dataset.i,1); saveState(); render(); },
+  wStart:()=>{ const w=ACT.warm; audio(); wakeOn(); w.start=Date.now(); w.zs={out:null,since:Date.now(),sig:null}; saveActive(); render(); },
+  wSkip:()=>{ ACT.warm=null; saveActive(); render(); },
+  wAddW:()=>{ ACT.warm=wPlan(WDEF); saveActive(); render(); },
+  wAdd:()=>{ const w=ACT.warm; if(w.paused!=null) w.paused+=60000; w.sec+=60; w.pre=false; saveActive(); render(); },
+  wPause:()=>{ const w=ACT.warm; w.paused=wLeft(w); saveActive(); render(); },
+  wResume:()=>{ const w=ACT.warm; w.sec=Math.round((Date.now()-w.start)/1000+w.paused/1000); w.paused=null; saveActive(); render(); },
+  wDone:()=>{ const w=ACT.warm; w.done=true; w.end=Date.now(); w.paused=null; saveActive(); render(); },
+  twMin:el=>{ const t=S.templates.find(x=>x.id===UI.id); t.warm=t.warm||{...WDEF}; t.warm.min=Math.max(1,Math.min(30,t.warm.min+(+el.dataset.d))); saveState(); render(); },
   tplAddEx:()=>openPicker('Добавить в шаблон',ids=>{ const t=S.templates.find(x=>x.id===UI.id); ids.forEach(id=>t.items.push({exId:id})); saveState(); render(); }),
   tplDelete:()=>confirmSheet('Удалить шаблон?','История тренировок останется.','Удалить',()=>{ S.templates=S.templates.filter(x=>x.id!==UI.id); if(S.nextTpl===UI.id) S.nextTpl=(S.templates[0]||{}).id; saveState(); back(); },true),
   gymNew:()=>{ const g={id:'g_'+uid(),name:'Новый зал',bars:[{name:'Олимпийский',w:20}],plates:[{w:20,n:4},{w:10,n:4},{w:5,n:4},{w:2.5,n:4},{w:1.25,n:4}],db:{mode:'fixed',handle:2,plates:[],fixed:'2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30'}}; S.gyms.push(g); saveState(); go('gymEdit',g.id); },
@@ -1485,6 +1525,8 @@ const F={
   sessNote:el=>{ const s=SESS.find(x=>x.id===UI.id); if(s){ s.note=el.value; saveSession(s); toast('Заметка сохранена'); } },
   dx:el=>{ const d=UI.draft, k=el.dataset.k; let v=el.value; if(k==='step'||k==='start'){ v=num(v); } if(k==='rest'){ v=num(v); v=v?Math.round(v):null; } if(k==='step'&&!(v>0)) v=5; d[k]=v; if(k==='equip'){ if(v==='barbell'&&!d.bar) d.bar='Олимпийский'; d.warm=v!=='bodyweight'; render(); } if(k==='machine') render(); },
   dxc:el=>{ UI.draft[el.dataset.k]=el.checked; },
+  twOn:el=>{ const t=S.templates.find(x=>x.id===UI.id); t.warm=t.warm||{...WDEF}; t.warm.on=el.checked; saveState(); render(); },
+  twPct:el=>{ const t=S.templates.find(x=>x.id===UI.id), w=t.warm; const v=num(el.value); if(v&&v>=40&&v<=95) w[el.dataset.k]=Math.round(v); if(w.lo>=w.hi){ if(el.dataset.k==='lo') w.hi=Math.min(95,w.lo+5); else w.lo=Math.max(40,w.hi-5); } saveState(); render(); },
   tplName:el=>{ const t=S.templates.find(x=>x.id===UI.id); t.name=el.value.trim()||t.name; saveState(); },
   gName:el=>{ const g=S.gyms.find(x=>x.id===UI.id); g.name=el.value.trim()||g.name; saveState(); render(); },
   gBar:el=>{ const g=S.gyms.find(x=>x.id===UI.id), b=g.bars[+el.dataset.i]; if(el.dataset.k==='w'){ const v=num(el.value); if(v!=null&&v>=0) b.w=v; } else b.name=el.value.trim(); saveState(); render(); },
