@@ -1345,8 +1345,11 @@ function warmCard(){ const w=ACT.warm; if(!w) return ACT.entries.some(e=>e.sets.
   <div class="tmctl"><button data-a="wAdd" aria-label="Плюс минута">+1 мин</button><button class="go" data-a="${w.paused!=null?'wResume':'wPause'}">${w.paused!=null?'Продолжить':'Пауза'}</button><button data-a="wDone">Готово</button></div></section>`; }
 function wTick(){ const w=ACT&&ACT.warm; if(!w||!w.start||w.done||w.paused!=null) return; const now=Date.now(), left=wLeft(w);
   const t=$('#wTime'); if(t) t.textContent=fmtSec(Math.ceil(left/1000)); const h=$('#wHr'); if(h) h.textContent=hrFresh()?HR.bpm:'—';
+  { const card=document.querySelector('.wcard'); if(card){ const bb=hrFresh()?HR.bpm:null, zc=bb==null?'':bb>w.hi?'hi':bb<w.lo?'lo':'in';
+      card.classList.remove('hi','lo','in'); if(zc) card.classList.add(zc);
+      const hn=$('#wHint'); if(hn) hn.textContent=zc==='hi'?'Выше коридора — сбавьте':zc==='lo'&&now-w.start>90000?'Ниже коридора — прибавьте':zc==='in'?'В коридоре — держите темп':'Ровный темп, без усилий'; } }
   if(hrFresh()&&now-w.start>90000){ const b=HR.bpm, out=b>w.hi?'hi':b<w.lo?'lo':null, z=w.zs;
-    if(out!==z.out){ z.out=out; z.since=now; render(); }
+    if(out!==z.out){ z.out=out; z.since=now; }
     if(out&&z.sig!==out&&now-z.since>=8000){ z.sig=out; wSigK(out); }
     if(!out) z.sig=null; }
   if(left<=10000&&!w.pre&&w.sec>20){ w.pre=true; wSigK('tick'); }
